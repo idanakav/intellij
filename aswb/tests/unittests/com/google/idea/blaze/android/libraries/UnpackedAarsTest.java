@@ -440,6 +440,176 @@ public class UnpackedAarsTest extends BlazeTestCase {
     assertThat(messages).contains("Removed 1 AARs");
   }
 
+  @Test
+  public void getLintRuleJar_localArtifact_lintFileIsReturn() throws IOException {
+    testGetLintRuleJarLintFileIsReturn(localArtifactLocationDecoder);
+  }
+
+  @Test
+  public void getLintRuleJar_remoteArtifact_lintFileIsReturn() throws IOException {
+    testGetLintRuleJarLintFileIsReturn(remoteArtifactLocationDecoder);
+  }
+
+  private void testGetLintRuleJarLintFileIsReturn(ArtifactLocationDecoder decoder)
+      throws IOException {
+    // arrange
+    UnpackedAars unpackedAars = UnpackedAars.getInstance(project);
+    String lintAar = "lint.aar";
+    File lintJar = workspaceRoot.fileForPath(new WorkspacePath(FN_LINT_JAR));
+    try (ZipOutputStream zo = new ZipOutputStream(new FileOutputStream(lintJar))) {
+      zo.putNextEntry(new ZipEntry("com/google/foo/sampleDetector.java"));
+      zo.write("package com.google.foo; class sampleDetector {}".getBytes(UTF_8));
+      zo.closeEntry();
+    }
+    byte[] expectedJarContent = Files.readAllBytes(lintJar.toPath());
+    AarLibraryFileBuilder.aar(workspaceRoot, lintAar).setLintJar(expectedJarContent).build();
+    ArtifactLocation lintAarArtifactLocation = generateArtifactLocation(lintAar);
+    AarLibrary lintAarLibrary = new AarLibrary(lintAarArtifactLocation, null);
+
+    BlazeAndroidImportResult importResult =
+        new BlazeAndroidImportResult(
+            ImmutableList.of(),
+            ImmutableMap.of(
+                LibraryKey.libraryNameFromArtifactLocation(lintAarArtifactLocation),
+                lintAarLibrary),
+            ImmutableList.of(),
+            ImmutableList.of());
+    BlazeAndroidSyncData syncData =
+        new BlazeAndroidSyncData(importResult, new AndroidSdkPlatform("stable", 15));
+    BlazeProjectData blazeProjectData =
+        MockBlazeProjectDataBuilder.builder(workspaceRoot)
+            .setWorkspaceLanguageSettings(
+                new WorkspaceLanguageSettings(WorkspaceType.ANDROID, ImmutableSet.of()))
+            .setSyncState(new SyncState.Builder().put(syncData).build())
+            .setArtifactLocationDecoder(decoder)
+            .build();
+
+    // act
+    FileCache.EP_NAME
+        .extensions()
+        .forEach(
+            ep ->
+                ep.onSync(
+                    getProject(),
+                    context,
+                    ProjectViewSet.builder().add(ProjectView.builder().build()).build(),
+                    blazeProjectData,
+                    null,
+                    SyncMode.INCREMENTAL));
+
+    // assert
+    File actualLintRuleJar = unpackedAars.getLintRuleJar(decoder, lintAarLibrary);
+    assertThat(actualLintRuleJar.exists()).isTrue();
+    assertThat(actualLintRuleJar.getName()).isEqualTo(FN_LINT_JAR);
+    byte[] actualJarContent = Files.readAllBytes(actualLintRuleJar.toPath());
+    assertThat(actualJarContent).isEqualTo(expectedJarContent);
+  }
+
+  @Test
+  public void getLintRuleJar_localArtifact_noLintAar_fileIsReturnButNotExist() throws IOException {
+    testGetLintRuleJarNoLintAarFileIsReturnButNotExist(localArtifactLocationDecoder);
+  }
+
+  @Test
+  public void getLintRuleJar_remoteArtifact_noLintAar_fileIsReturnButNotExist() throws IOException {
+    testGetLintRuleJarNoLintAarFileIsReturnButNotExist(remoteArtifactLocationDecoder);
+  }
+
+  private void testGetLintRuleJarNoLintAarFileIsReturnButNotExist(ArtifactLocationDecoder decoder) {
+    // arrange
+    UnpackedAars unpackedAars = UnpackedAars.getInstance(project);
+
+    String noLintAar = "noLintAar.aar";
+    AarLibraryFileBuilder.aar(workspaceRoot, noLintAar).build();
+    ArtifactLocation noLintAarArtifactLocation = generateArtifactLocation(noLintAar);
+    AarLibrary noLintAarLibrary = new AarLibrary(noLintAarArtifactLocation, null);
+
+    BlazeAndroidImportResult importResult =
+        new BlazeAndroidImportResult(
+            ImmutableList.of(),
+            ImmutableMap.of(
+                LibraryKey.libraryNameFromArtifactLocation(noLintAarArtifactLocation),
+                noLintAarLibrary),
+            ImmutableList.of(),
+            ImmutableList.of());
+    BlazeAndroidSyncData syncData =
+        new BlazeAndroidSyncData(importResult, new AndroidSdkPlatform("stable", 15));
+    BlazeProjectData blazeProjectData =
+        MockBlazeProjectDataBuilder.builder(workspaceRoot)
+            .setWorkspaceLanguageSettings(
+                new WorkspaceLanguageSettings(WorkspaceType.ANDROID, ImmutableSet.of()))
+            .setSyncState(new SyncState.Builder().put(syncData).build())
+            .setArtifactLocationDecoder(decoder)
+            .build();
+
+    // act
+    FileCache.EP_NAME
+        .extensions()
+        .forEach(
+            ep ->
+                ep.onSync(
+                    getProject(),
+                    context,
+                    ProjectViewSet.builder().add(ProjectView.builder().build()).build(),
+                    blazeProjectData,
+                    null,
+                    SyncMode.INCREMENTAL));
+
+    // assert
+    File actualLintRuleJar = unpackedAars.getLintRuleJar(decoder, noLintAarLibrary);
+    assertThat(actualLintRuleJar.exists()).isFalse();
+  }
+
+  @Test
+  public void getLintRuleJar_localArtifact_notExistAar_nullIsReturn() throws IOException {
+    testGetLintRuleJar_notExistAar_nullIsReturn(localArtifactLocationDecoder);
+  }
+
+  @Test
+  public void getLintRuleJar_remoteArtifact_notExistAar_nullIsReturn() throws IOException {
+    testGetLintRuleJar_notExistAar_nullIsReturn(remoteArtifactLocationDecoder);
+  }
+
+  private void testGetLintRuleJar_notExistAar_nullIsReturn(ArtifactLocationDecoder decoder) {
+    // arrange
+    UnpackedAars unpackedAars = UnpackedAars.getInstance(project);
+
+    String notImportedAar = "notImported.aar";
+    AarLibraryFileBuilder.aar(workspaceRoot, notImportedAar).build();
+    ArtifactLocation notImportedAarArtifactLocation = generateArtifactLocation(notImportedAar);
+    AarLibrary notImportedAarLibrary = new AarLibrary(notImportedAarArtifactLocation, null);
+
+    BlazeAndroidImportResult importResult =
+        new BlazeAndroidImportResult(
+            ImmutableList.of(), ImmutableMap.of(), ImmutableList.of(), ImmutableList.of());
+    BlazeAndroidSyncData syncData =
+        new BlazeAndroidSyncData(importResult, new AndroidSdkPlatform("stable", 15));
+    BlazeProjectData blazeProjectData =
+        MockBlazeProjectDataBuilder.builder(workspaceRoot)
+            .setWorkspaceLanguageSettings(
+                new WorkspaceLanguageSettings(WorkspaceType.ANDROID, ImmutableSet.of()))
+            .setSyncState(new SyncState.Builder().put(syncData).build())
+            .setArtifactLocationDecoder(decoder)
+            .build();
+
+    // act
+    FileCache.EP_NAME
+        .extensions()
+        .forEach(
+            ep ->
+                ep.onSync(
+                    getProject(),
+                    context,
+                    ProjectViewSet.builder().add(ProjectView.builder().build()).build(),
+                    blazeProjectData,
+                    null,
+                    SyncMode.INCREMENTAL));
+
+    // assert
+    File actualLintRuleJar = unpackedAars.getLintRuleJar(decoder, notImportedAarLibrary);
+    assertThat(actualLintRuleJar).isNull();
+  }
+
   private static class WritingOutputSink implements OutputSink<PrintOutput> {
 
     private final Writer writer = new StringWriter();
