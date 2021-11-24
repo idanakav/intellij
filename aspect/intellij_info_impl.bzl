@@ -572,7 +572,7 @@ def _collect_generated_files(java):
         return [(java.annotation_processing.class_jar, java.annotation_processing.source_jar)]
     return []
 
-def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_groups):
+def collect_java_info(target, all_deps, ctx, semantics, ide_info, ide_info_file, output_groups):
     """Updates Java-specific output groups, returns false if not a Java target."""
     java = get_java_provider(target)
     if not java:
@@ -644,6 +644,20 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
         )
         resolve_files += filtered_gen_resolve_files
 
+    # Support Android Lint plugins coming from plugins and exported_plugins attributes (b/117176859)
+    plugin_processor_jars = []
+    if hasattr(ctx.rule.attr, "plugins"):
+        for plugin in ctx.rule.attr.plugins:
+            plugin_processor_jars_files = plugin[JavaPluginInfo].plugins.processor_jars.to_list()
+            resolve_files += plugin_processor_jars_files
+            plugin_processor_jars += [annotation_processing_jars(jar, None) for jar in plugin_processor_jars_files]
+    if hasattr(ctx.rule.attr, "deps"):
+        for dep in ctx.rule.attr.deps:
+            if JavaInfo in dep:
+                plugin_processor_jars_files = dep[JavaInfo].plugins.processor_jars.to_list()
+                plugin_processor_jars += [annotation_processing_jars(jar, None) for jar in plugin_processor_jars_files]
+                resolve_files += plugin_processor_jars_files
+
     java_info = struct_omit_none(
         filtered_gen_jar = filtered_gen_jar,
         generated_jars = gen_jars,
@@ -653,6 +667,7 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
         package_manifest = artifact_location(package_manifest),
         sources = sources,
         test_class = getattr(ctx.rule.attr, "test_class", None),
+        plugin_processor_jars = plugin_processor_jars,
     )
 
     ide_info["java_ide_info"] = java_info
@@ -1103,7 +1118,7 @@ def intellij_info_aspect_impl(target, ctx, semantics):
     handled = collect_cpp_info(target, ctx, semantics, ide_info, ide_info_file, output_groups) or handled
     handled = collect_c_toolchain_info(target, ctx, semantics, ide_info, ide_info_file, output_groups) or handled
     handled = collect_go_info(target, ctx, semantics, ide_info, ide_info_file, output_groups) or handled
-    handled = collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_groups) or handled
+    handled = collect_java_info(target, all_deps, ctx, semantics, ide_info, ide_info_file, output_groups) or handled
     handled = collect_java_toolchain_info(target, ide_info, ide_info_file, output_groups) or handled
     handled = collect_android_info(target, ctx, semantics, ide_info, ide_info_file, output_groups) or handled
     handled = collect_kotlin_toolchain_info(target, ide_info, ide_info_file, output_groups) or handled
