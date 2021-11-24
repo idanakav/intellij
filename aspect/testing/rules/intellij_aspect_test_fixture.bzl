@@ -39,7 +39,7 @@ def _impl(ctx):
         inputs = inputs.to_list() + [argfile],
         outputs = [output],
         executable = ctx.executable._intellij_aspect_test_fixture_builder,
-        arguments = ["@" + argfile.path],
+        arguments = ["@" + argfile.path, str(hasattr(java_common, "JavaPluginInfo"))],
         mnemonic = "IntellijAspectTestFixtureBuilder",
         progress_message = "Building Intellij Aspect Test Fixture",
     )

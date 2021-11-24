@@ -46,6 +46,7 @@ public class IntellijAspectTestFixtureBuilder {
       String outputFilePath = realArgs.get(0);
       String[] aspectFiles = realArgs.get(1).split(":");
       builder.addAllTargets(parseTargets(aspectFiles));
+      builder.setPluginInfoIsAvailable(Boolean.parseBoolean(args[1]));
       for (int i = 2; i < realArgs.size(); i += 2) {
         String name = realArgs.get(i);
         List<String> paths = Splitter.on(':').omitEmptyStrings().splitToList(realArgs.get(i + 1));

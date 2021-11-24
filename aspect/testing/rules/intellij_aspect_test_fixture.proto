@@ -14,9 +14,9 @@
 
 syntax = "proto3";
 
-import "proto/intellij_ide_info.proto";
-
 package blaze;
+
+import "proto/intellij_ide_info.proto";
 
 option java_package = "com.google.devtools.intellij";
 // option java_api_version = 2;
@@ -24,6 +24,8 @@ option java_package = "com.google.devtools.intellij";
 message IntellijAspectTestFixture {
   repeated TargetIdeInfo targets = 1;
   repeated OutputGroup output_groups = 2;
+  bool plugin_info_is_available =
+      3;  // removed when JavaPluginInfo provider is available on bazel
 }
 
 message OutputGroup {

@@ -644,6 +644,20 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
         )
         resolve_files += filtered_gen_resolve_files
 
+    #  Custom lint checks are incorporated as java plugins. We collect them here and register them with the IDE so that the IDE can also run the same checks.
+    plugin_processor_jars = []
+    if hasattr(ctx.rule.attr, "plugins"):
+        for plugin in ctx.rule.attr.plugins:
+            if hasattr(java_common, "JavaPluginInfo") and java_common.JavaPluginInfo in plugin:
+                plugin_processor_jar_files = plugin[java_common.JavaPluginInfo].plugins.processor_jars.to_list()
+                resolve_files += plugin_processor_jar_files
+                plugin_processor_jars += [annotation_processing_jars(jar, None) for jar in plugin_processor_jar_files]
+    if hasattr(ctx.rule.attr, "deps"):
+        for dep in ctx.rule.attr.deps:
+            if JavaInfo in dep and hasattr(dep[JavaInfo], "plugins") and dep[JavaInfo].plugins.processor_jars:
+                plugin_processor_jars_files = dep[JavaInfo].plugins.processor_jars.to_list()
+                plugin_processor_jars += [annotation_processing_jars(jar, None) for jar in plugin_processor_jars_files]
+                resolve_files += plugin_processor_jars_files
     java_info = struct_omit_none(
         filtered_gen_jar = filtered_gen_jar,
         generated_jars = gen_jars,
@@ -653,6 +667,7 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
         package_manifest = artifact_location(package_manifest),
         sources = sources,
         test_class = getattr(ctx.rule.attr, "test_class", None),
+        plugin_processor_jars = plugin_processor_jars,
     )
 
     ide_info["java_ide_info"] = java_info
