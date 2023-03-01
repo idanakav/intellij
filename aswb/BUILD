@@ -19,6 +19,7 @@ load("//:version.bzl", "VERSION")
 load(
     "//intellij_platform_sdk:build_defs.bzl",
     "combine_visibilities",
+    "select_for_ide",
     "select_for_plugin_api",
 )
 load(
@@ -35,6 +36,12 @@ load(
 )
 
 licenses(["notice"])
+
+_CPP_IMPL_SRCS = ["src/com/google/idea/blaze/android/cppimpl/**/*.java"]
+
+_TEST_RECORDER_SRCS = ["src/com/google/idea/blaze/android/run/testrecorder/**/*.java"]
+
+_ANDROID_STUDIO_ONLY_SRCS = _CPP_IMPL_SRCS + _TEST_RECORDER_SRCS
 
 optional_plugin_xml(
     name = "optional_ndk_xml",
@@ -142,15 +149,28 @@ java_library(
     ],
 )
 
+filegroup(
+    name = "common_srcs",
+    srcs = glob(
+        ["src/**/*.java"],
+        exclude = _ANDROID_STUDIO_ONLY_SRCS,
+    ),
+    visibility = ["//visibility:private"],
+)
+
 java_library(
     name = "aswb_lib",
-    srcs = glob(["src/**/*.java"]) + select_for_plugin_api({
+    srcs = [":common_srcs"] + select_for_plugin_api({
         "android-studio-2021.3": glob(["sdkcompat/as213/**/*.java"]),
         "android-studio-2022.1": glob(["sdkcompat/as221/**/*.java"]),
         "android-studio-2022.2": glob(["sdkcompat/as222/**/*.java"]),
         "android-studio-2022.3": glob(["sdkcompat/as223/**/*.java"]),
         "android-studio-dev": glob(["sdkcompat/asdev/**/*.java"]),
-    }),
+        "intellij-2022.3": glob(["sdkcompat/idea223/**/*.java"]),
+    }) + select_for_ide(
+        android_studio = glob(_ANDROID_STUDIO_ONLY_SRCS),
+        intellij = [],
+    ),
     resources = glob(["resources/**/*"]),
     visibility = combine_visibilities(
         ASWB_SUBPACKAGES_VISIBILITY,
@@ -286,7 +306,6 @@ intellij_plugin(
     deps = [
         ":plugin_library",
         "//base:plugin_library",
-        "//cpp:plugin_library",
         "//dart:plugin_library",
         "//java:plugin_library",
         "//kotlin:plugin_library",
@@ -294,7 +313,9 @@ intellij_plugin(
         "//python:plugin_library",
         "//skylark:plugin_library",
         "//terminal:plugin_library",
-    ],
+    ] + select_for_ide(
+        android_studio = ["//cpp:plugin_library"],
+    ),
 )
 
 repackaged_files(
