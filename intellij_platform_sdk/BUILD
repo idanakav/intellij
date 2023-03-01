@@ -557,6 +557,7 @@ java_library(
             ":clion_plugins",
         ],
         intellij = [
+            ":android",
             ":sdk",
             ":java",
             ":kotlin",
