@@ -1087,6 +1087,8 @@ def intellij_info_aspect_impl(target, ctx, semantics):
             # everything else gets rolled up transitively
             output_groups[k] = output_groups[k] + [v] if k in output_groups else [v]
 
+    #print("outputgroups = {}".format(output_groups))
+
     # Convert output_groups from lists to depsets after the lists are finalized. This avoids
     # creating and growing depsets gradually, as that results in depsets many levels deep:
     # a construct which would give the build system some trouble.

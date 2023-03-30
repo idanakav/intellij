@@ -28,8 +28,8 @@ INDIRECT_IJ_PRODUCTS = {
     "intellij-oss-latest-stable": "intellij-2022.2",
     "intellij-oss-under-dev": "intellij-2022.2",
     "intellij-ue-oss-oldest-stable": "intellij-ue-2022.1",
-    "intellij-ue-oss-latest-stable": "intellij-ue-2022.2",
-    "intellij-ue-oss-under-dev": "intellij-ue-2022.2",
+    "intellij-ue-oss-latest-stable": "intellij-ue-2022.3",
+    "intellij-ue-oss-under-dev": "intellij-ue-2023.1",
     "android-studio-oss-oldest-stable": "android-studio-2021.3",
     "android-studio-oss-latest-stable": "android-studio-2022.2",
     "android-studio-oss-under-dev": "android-studio-2022.2",
@@ -41,8 +41,8 @@ INDIRECT_IJ_PRODUCTS = {
     "intellij-cc-latest-stable": "intellij-2022.2",
     "intellij-cc-under-dev": "intellij-2022.3",
     "intellij-ue-cc-oldest-stable": "intellij-ue-2022.1",
-    "intellij-ue-cc-latest-stable": "intellij-ue-2022.2",
-    "intellij-ue-cc-under-dev": "intellij-ue-2022.3",
+    "intellij-ue-cc-latest-stable": "intellij-ue-2022.3",
+    "intellij-ue-cc-under-dev": "intellij-ue-2023.1",
 }
 
 DIRECT_IJ_PRODUCTS = {
@@ -78,6 +78,14 @@ DIRECT_IJ_PRODUCTS = {
         ide = "intellij",
         directory = "intellij_ce_2022_3",
     ),
+    "intellij-2023.1": struct(
+        ide = "intellij",
+        directory = "intellij_ce_2023_1",
+    ),
+    "intellij-2023.1-mac": struct(
+        ide = "intellij",
+        directory = "intellij_ce_2023_1",
+    ),
     "intellij-ue-2021.3": struct(
         ide = "intellij-ue",
         directory = "intellij_ue_2021_3",
@@ -109,6 +117,14 @@ DIRECT_IJ_PRODUCTS = {
     "intellij-ue-2022.3-mac": struct(
         ide = "intellij-ue",
         directory = "intellij_ue_2022_3",
+    ),
+    "intellij-ue-2023.1": struct(
+        ide = "intellij-ue",
+        directory = "intellij_ue_2023_1",
+    ),
+    "intellij-ue-2023.1-mac": struct(
+        ide = "intellij-ue",
+        directory = "intellij_ue_2023_1",
     ),
     "android-studio-2021.3": struct(
         ide = "android-studio",

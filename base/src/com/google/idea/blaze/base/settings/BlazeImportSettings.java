@@ -21,12 +21,6 @@ import javax.annotation.Nullable;
 /** Project settings that are set at import time. */
 public final class BlazeImportSettings {
 
-  /** Type of the project based on the IDE configuration when it was created. */
-  public enum ProjectType {
-    ASPECT_SYNC,
-    QUERY_SYNC,
-  }
-
   private String workspaceRoot = "";
 
   private String projectName = "";
@@ -40,9 +34,6 @@ public final class BlazeImportSettings {
   // default for backwards compatibility with existing projects
   private BuildSystemName buildSystem = BuildSystemName.Blaze;
 
-  // default for backwards compatibility with existing projects
-  private ProjectType projectType = ProjectType.ASPECT_SYNC;
-
   // Used by bean serialization
   @SuppressWarnings("unused")
   BlazeImportSettings() {}
@@ -52,15 +43,13 @@ public final class BlazeImportSettings {
       String projectName,
       String projectDataDirectory,
       String projectViewFile,
-      BuildSystemName buildSystemName,
-      ProjectType projectType) {
+      BuildSystemName buildSystemName) {
     this.workspaceRoot = workspaceRoot;
     this.projectName = projectName;
     this.projectDataDirectory = projectDataDirectory;
     this.locationHash = createLocationHash(projectName);
     this.projectViewFile = projectViewFile;
     this.buildSystem = buildSystemName;
-    this.projectType = projectType;
   }
 
   private static String createLocationHash(String projectName) {
@@ -100,12 +89,6 @@ public final class BlazeImportSettings {
   @SuppressWarnings("unused")
   public BuildSystemName getBuildSystem() {
     return buildSystem;
-  }
-
-  /** The type of this project. */
-  @SuppressWarnings("unused")
-  public ProjectType getProjectType() {
-    return projectType;
   }
 
   // Used by bean serialization
@@ -148,11 +131,5 @@ public final class BlazeImportSettings {
   @SuppressWarnings("unused")
   public void setBuildSystem(BuildSystemName buildSystem) {
     this.buildSystem = buildSystem;
-  }
-
-  // Used by bean serialization
-  @SuppressWarnings("unused")
-  public void setProjectType(ProjectType projectType) {
-    this.projectType = projectType;
   }
 }

@@ -115,21 +115,15 @@ public class ServiceHelper {
 
   private static <T> void registerComponentInstance(
       MutablePicoContainer container, Class<T> key, T implementation, Disposable parentDisposable) {
-    Object old;
-    try {
-      old = container.getComponentInstance(key);
-    } catch (RuntimeException e) {
-      old = null;
-    }
+    Object old = ApplicationManager.getApplication().getComponent(key);
     container.unregisterComponent(key.getName());
     container.registerComponentInstance(key.getName(), implementation);
-    Object finalOld = old;
     Disposer.register(
         parentDisposable,
         () -> {
           container.unregisterComponent(key.getName());
-          if (finalOld != null) {
-            container.registerComponentInstance(key.getName(), finalOld);
+          if (old != null) {
+            container.registerComponentInstance(key.getName(), old);
           }
         });
   }
@@ -151,6 +145,7 @@ public class ServiceHelper {
       Disposer.register(parentDisposable, (Disposable) implementation);
     }
     Disposer.register(
-        parentDisposable, () -> BaseSdkTestCompat.unregisterComponent(componentManager, key));
+        parentDisposable,
+        () -> BaseSdkTestCompat.unregisterComponent(componentManager, key));
   }
 }

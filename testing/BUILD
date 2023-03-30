@@ -53,12 +53,9 @@ java_library(
             "testcompat/v221/com/google/idea/sdkcompat/**/*.java",
             "testcompat/v221_ij/com/google/idea/sdkcompat/**/*.java",
         ]),
-        "clion-2022.2": glob([
-            "testcompat/v222/com/google/idea/sdkcompat/**/*.java",
-        ]),
-        "clion-2022.3": glob([
-            "testcompat/v223/com/google/idea/sdkcompat/**/*.java",
-        ]),
+        "clion-2022.2": glob(["testcompat/v222/com/google/idea/sdkcompat/**/*.java"]),
+        "clion-2022.3": glob(["testcompat/v223/com/google/idea/sdkcompat/**/*.java"]),
+        "clion-2023.1": glob(["testcompat/v231/com/google/idea/sdkcompat/**/*.java"]),
         "intellij-2021.3": glob([
             "testcompat/v213/com/google/idea/sdkcompat/**/*.java",
             "testcompat/v213/com/google/idea/testing/java/*.java",
@@ -81,17 +78,25 @@ java_library(
             "testcompat/v222/com/google/idea/sdkcompat/**/*.java",
             "testcompat/v222/com/google/idea/testing/java/*.java",
         ]),
-        "intellij-2022.3": glob([
-            "testcompat/v223/com/google/idea/sdkcompat/**/*.java",
-            "testcompat/v223/com/google/idea/testing/java/*.java",
-        ]),
         "intellij-ue-2022.2": glob([
             "testcompat/v222/com/google/idea/sdkcompat/**/*.java",
             "testcompat/v222/com/google/idea/testing/java/*.java",
         ]),
+        "intellij-2022.3": glob([
+            "testcompat/v223/com/google/idea/sdkcompat/**/*.java",
+            "testcompat/v223/com/google/idea/testing/java/*.java",
+        ]),
         "intellij-ue-2022.3": glob([
             "testcompat/v223/com/google/idea/sdkcompat/**/*.java",
             "testcompat/v223/com/google/idea/testing/java/*.java",
+        ]),
+        "intellij-2023.1": glob([
+            "testcompat/v231/com/google/idea/sdkcompat/**/*.java",
+            "testcompat/v231/com/google/idea/testing/java/*.java",
+        ]),
+        "intellij-ue-2023.1": glob([
+            "testcompat/v231/com/google/idea/sdkcompat/**/*.java",
+            "testcompat/v231/com/google/idea/testing/java/*.java",
         ]),
         "default": [],
     }),

@@ -20,27 +20,25 @@ import com.google.common.collect.Lists;
 import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
-import com.intellij.codeInsight.AttachSourcesProvider;
+import com.google.idea.sdkcompat.java.AttachSourcesProviderAdapter;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.LibraryOrderEntry;
 import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.util.ActionCallback;
 import com.intellij.psi.PsiFile;
+import org.jetbrains.annotations.NotNull;
+
 import java.util.Collection;
 import java.util.List;
-import org.jetbrains.annotations.NotNull;
 
 /** */
 public class AddLibraryTargetDirectoryToProjectViewAttachSourcesProvider
-    implements AttachSourcesProvider {
+    extends AttachSourcesProviderAdapter {
 
-  /* #api223 Use List<? extends LibraryOrderEntry> as parameter. */
   @NotNull
   @Override
-  public Collection<AttachSourcesAction> getActions(
-      List untypedOrderEntries, final PsiFile psiFile) {
-    List<? extends LibraryOrderEntry> orderEntries =
-        (List<? extends LibraryOrderEntry>) untypedOrderEntries;
+  public Collection<AttachSourcesAction> getAdapterActions(
+      List<? extends LibraryOrderEntry> orderEntries, final PsiFile psiFile) {
     Project project = psiFile.getProject();
     BlazeProjectData blazeProjectData =
         BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
@@ -65,7 +63,7 @@ public class AddLibraryTargetDirectoryToProjectViewAttachSourcesProvider
     }
 
     return ImmutableList.of(
-        new AttachSourcesAction() {
+        new AttachSourcesActionAdapter() {
           @Override
           public String getName() {
             return "Add Source Directories To Project View";
@@ -76,9 +74,8 @@ public class AddLibraryTargetDirectoryToProjectViewAttachSourcesProvider
             return "Adding directories...";
           }
 
-          /* #api223 Use List<? extends LibraryOrderEntry> as parameter. */
           @Override
-          public ActionCallback perform(List orderEntriesContainingFile) {
+          public ActionCallback adapterPerform(List<? extends LibraryOrderEntry> orderEntriesContainingFile) {
             AddLibraryTargetDirectoryToProjectViewAction.addDirectoriesToProjectView(
                 project, librariesToAttachSourceTo);
             return ActionCallback.DONE;

@@ -36,9 +36,7 @@ def to_artifact_location(exec_path, root_exec_path_fragment, is_source, is_exter
     # exec_path = (../repo_name)? + (root_fragment)? + relative_path
     relative_path = _strip_external_workspace_prefix(exec_path)
     relative_path = _strip_root_exec_path_fragment(relative_path, root_exec_path_fragment)
-
     root_exec_path_fragment = exec_path[:-(len("/" + relative_path))]
-
     return struct_omit_none(
         relative_path = relative_path,
         is_source = is_source,

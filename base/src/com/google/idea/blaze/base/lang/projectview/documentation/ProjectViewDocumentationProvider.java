@@ -25,12 +25,16 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import com.intellij.util.io.HttpRequests;
+
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.Collections;
 import java.util.List;
-import javax.annotation.Nullable;
+import java.util.concurrent.CompletableFuture;
+
+import static com.intellij.openapi.progress.util.ProgressIndicatorUtils.awaitWithCheckCanceled;
 
 /** Provides quick docs for some .blazeproject elements. */
 public class ProjectViewDocumentationProvider extends AbstractDocumentationProvider
@@ -110,26 +114,19 @@ public class ProjectViewDocumentationProvider extends AbstractDocumentationProvi
     }
     return url;
   }
-
-  private static boolean pageExists(String urlStr) {
-    try {
-      URL url = new URL(urlStr);
-      HttpURLConnection con = (HttpURLConnection) url.openConnection();
-      con.setRequestMethod("HEAD");
-      con.setReadTimeout(5 * 1000);
-      con.setConnectTimeout(5 * 1000);
-      con.connect();
-      final int rc = con.getResponseCode();
-      if (rc == 404) {
-        return false;
-      }
-    } catch (IllegalArgumentException e) {
-      return false;
-    } catch (IOException e) {
-      // ignore
+    private static boolean pageExists(String url) {
+        CompletableFuture<Boolean> f = CompletableFuture.supplyAsync(() -> {
+            try {
+                return HttpRequests.head(url)
+                        .forceHttps(true)
+                        .connectTimeout(5 * 1000)
+                        .tryConnect() == HttpURLConnection.HTTP_OK;
+            } catch (IOException e) {
+                return false;
+            }
+        });
+        return awaitWithCheckCanceled(f);
     }
-    return true;
-  }
 
   @Nullable
   @Override

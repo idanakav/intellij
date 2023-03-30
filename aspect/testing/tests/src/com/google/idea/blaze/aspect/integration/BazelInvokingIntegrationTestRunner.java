@@ -60,7 +60,7 @@ public class BazelInvokingIntegrationTestRunner {
 
     if (bazelVersion.isAtLeast(6, 0, 0)
         && !aspectFlags.contains(
-            "--aspects=@@intellij_aspect//:intellij_info_bundled.bzl%intellij_info_aspect")) {
+            "--aspects=@intellij_aspect//:intellij_info_bundled.bzl%intellij_info_aspect")) {
       exitWithError(
           String.format("Incorrect/Missing aspects flag in command args (%s)", aspectFlags));
     }

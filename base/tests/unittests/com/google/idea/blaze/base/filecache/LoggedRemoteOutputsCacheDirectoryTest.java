@@ -24,7 +24,6 @@ import com.google.idea.blaze.base.filecache.RemoteOutputsCache.LoggedRemoteOutpu
 import com.google.idea.blaze.base.logging.LoggedDirectoryProvider;
 import com.google.idea.blaze.base.logging.LoggedDirectoryProvider.LoggedDirectory;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
-import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.blaze.base.settings.BuildSystemName;
 import com.google.idea.testing.IntellijRule;
@@ -124,7 +123,6 @@ public class LoggedRemoteOutputsCacheDirectoryTest {
         /* projectName= */ "",
         /* projectDataDirectory= */ temporaryFolder.getRoot().toString(),
         /* projectViewFile= */ "",
-        buildSystemName,
-        ProjectType.ASPECT_SYNC);
+        buildSystemName);
   }
 }

@@ -23,7 +23,6 @@ import com.google.idea.blaze.base.io.VirtualFileSystemProvider;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
-import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.blaze.base.settings.BuildSystemName;
 import com.google.idea.blaze.base.sync.SyncCache;
@@ -118,8 +117,7 @@ public abstract class BlazeIntegrationTestCase {
                 "test-project",
                 projectDataDirectory.getPath(),
                 workspaceRoot.fileForPath(new WorkspacePath("project-view-file")).getPath(),
-                buildSystem(),
-                ProjectType.ASPECT_SYNC));
+                buildSystem()));
 
     registerApplicationService(
         InputStreamProvider.class,

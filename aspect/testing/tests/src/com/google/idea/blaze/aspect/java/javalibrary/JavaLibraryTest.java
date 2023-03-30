@@ -87,7 +87,7 @@ public class JavaLibraryTest extends BazelIntellijAspectTest {
     assertThat(target.hasPyIdeInfo()).isFalse();
 
     assertThat(relativePathsForArtifacts(target.getJavaIdeInfo().getSourcesList()))
-        .containsExactly(testRelative("Foo.java"));
+         .containsExactly(testRelative("Foo.java"));
     assertThat(
             target.getJavaIdeInfo().getJarsList().stream()
                 .map(IntellijAspectTest::libraryArtifactToString)

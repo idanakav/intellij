@@ -176,6 +176,7 @@ java_library(
         "android-studio-2022.3": glob(["sdkcompat/as223/**/*.java"]),
         "android-studio-dev": glob(["sdkcompat/asdev/**/*.java"]),
         "intellij-2022.3": glob(["sdkcompat/idea223/**/*.java"]),
+        "intellij-2023.1": glob(["sdkcompat/idea223/**/*.java"]),
     }) + select_for_ide(
         android_studio = glob(_ANDROID_STUDIO_ONLY_SRCS),
         intellij = [],

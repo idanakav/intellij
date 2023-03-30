@@ -26,7 +26,7 @@ import com.google.idea.blaze.base.sync.libraries.LibraryEditor;
 import com.google.idea.blaze.java.sync.model.BlazeJarLibrary;
 import com.google.idea.common.experiments.BoolExperiment;
 import com.google.idea.common.util.Transactions;
-import com.intellij.codeInsight.AttachSourcesProvider;
+import com.google.idea.sdkcompat.java.AttachSourcesProviderAdapter;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.externalSystem.service.project.IdeModifiableModelsProvider;
@@ -47,17 +47,14 @@ import javax.annotation.Nullable;
  *
  * <p>Optionally also attaches sources automatically, on demand.
  */
-public class BlazeAttachSourceProvider implements AttachSourcesProvider {
+public class BlazeAttachSourceProvider extends AttachSourcesProviderAdapter {
 
   private static final BoolExperiment attachAutomatically =
       new BoolExperiment("blaze.attach.source.jars.automatically.3", true);
 
-  /* #api223 Use List<? extends LibraryOrderEntry> as parameter. */
   @Override
-  public Collection<AttachSourcesAction> getActions(
-      List untypedOrderEntries, final PsiFile psiFile) {
-    List<? extends LibraryOrderEntry> orderEntries =
-        (List<? extends LibraryOrderEntry>) untypedOrderEntries;
+  public Collection<AttachSourcesAction> getAdapterActions(
+      List<? extends LibraryOrderEntry> orderEntries, final PsiFile psiFile) {
     Project project = psiFile.getProject();
     BlazeProjectData blazeProjectData =
         BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
@@ -108,7 +105,7 @@ public class BlazeAttachSourceProvider implements AttachSourcesProvider {
     }
 
     return ImmutableList.of(
-        new AttachSourcesAction() {
+        new AttachSourcesActionAdapter() {
           @Override
           public String getName() {
             return "Attach Blaze Source Jars";
@@ -119,9 +116,8 @@ public class BlazeAttachSourceProvider implements AttachSourcesProvider {
             return "Attaching source jars...";
           }
 
-          /* #api223 Use List<? extends LibraryOrderEntry> as parameter. */
           @Override
-          public ActionCallback perform(List orderEntriesContainingFile) {
+          public ActionCallback adapterPerform(List<? extends LibraryOrderEntry> orderEntriesContainingFile) {
             ActionCallback callback =
                 new ActionCallback().doWhenDone(() -> navigateToSource(psiFile));
             Transactions.submitTransaction(

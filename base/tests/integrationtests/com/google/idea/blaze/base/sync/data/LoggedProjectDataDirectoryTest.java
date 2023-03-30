@@ -23,7 +23,6 @@ import static org.mockito.Mockito.when;
 import com.google.idea.blaze.base.logging.LoggedDirectoryProvider;
 import com.google.idea.blaze.base.logging.LoggedDirectoryProvider.LoggedDirectory;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
-import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.blaze.base.settings.BuildSystemName;
 import com.google.idea.blaze.base.sync.data.BlazeDataStorage.LoggedProjectDataDirectory;
@@ -124,7 +123,6 @@ public class LoggedProjectDataDirectoryTest {
         /* projectName= */ "",
         /* projectDataDirectory= */ temporaryFolder.getRoot().toString(),
         /* projectViewFile= */ "",
-        buildSystemName,
-        ProjectType.ASPECT_SYNC);
+        buildSystemName);
   }
 }
