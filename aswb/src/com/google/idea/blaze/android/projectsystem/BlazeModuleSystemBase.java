@@ -360,6 +360,7 @@ abstract class BlazeModuleSystemBase implements AndroidModuleSystem {
     return resourceModule.transitiveResourceDependencies.stream()
         .map(resourceModuleRegistry::getModuleContainingResourcesOf)
         .filter(Objects::nonNull)
+        .distinct()
         .collect(Collectors.toList());
   }
 
