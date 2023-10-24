@@ -260,7 +260,7 @@ public final class BlazeJavaWorkspaceImporter {
       // loading time longer.
       workspaceBuilder.jdeps.addAll(
           jars.stream()
-              .filter(jar -> !jar.contains("-kt-ijar.jar") && !jar.contains("-kt-src.jar"))
+              .filter(jar -> !jar.contains("-kt-ijar.jar") && !jar.contains("-kt-src.jar") && !jar.contains("-kt.abi.jar"))
               .collect(toImmutableList()));
     }
 
