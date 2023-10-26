@@ -565,7 +565,7 @@ def get_java_provider(target):
         return target[java_common.JavaPluginInfo]
     return None
 
-def _collect_generated_files(java):
+def _collect_generated_files(ctx, java):
     """Collects generated files from a Java target"""
     if hasattr(java, "java_outputs"):
         return [
@@ -574,10 +574,21 @@ def _collect_generated_files(java):
             if outputs.generated_class_jar != None
         ]
 
+    """Collect generated files from a Kotlin target"""
+    gen_jars = []
+    if ctx.rule.kind.startswith("kt_"):
+        if hasattr(java, "outputs") and hasattr(java.outputs, "jars") and java.outputs.jars:
+            gen_jars += [
+                (None, jar)
+                for jars in java.outputs.jars
+                if hasattr(jars, "generated_jars")
+                for jar in jars.generated_jars
+            ]
+
     # Handles Bazel versions before 5.0.0.
     if (hasattr(java, "annotation_processing") and java.annotation_processing and java.annotation_processing.enabled):
-        return [(java.annotation_processing.class_jar, java.annotation_processing.source_jar)]
-    return []
+        gen_jars += [(java.annotation_processing.class_jar, java.annotation_processing.source_jar)]
+    return gen_jars
 
 def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_groups):
     """Updates Java-specific output groups, returns false if not a Java target."""
@@ -604,7 +615,7 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
     compile_files = class_jars
 
     gen_jars = []
-    for generated_class_jar, generated_source_jar in _collect_generated_files(java):
+    for generated_class_jar, generated_source_jar in _collect_generated_files(ctx, java):
         gen_jars.append(annotation_processing_jars(generated_class_jar, generated_source_jar))
         resolve_files += [
             jar
