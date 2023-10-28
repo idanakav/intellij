@@ -18,6 +18,7 @@ package com.google.idea.blaze.java.syncstatus;
 import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.primitives.LanguageClass;
 import com.google.idea.blaze.base.syncstatus.SyncStatusContributor;
+import com.google.idea.blaze.java.sync.gen.GeneratedCodeExtractor;
 import com.intellij.ide.projectView.ProjectViewNode;
 import com.intellij.ide.projectView.impl.nodes.ClassTreeNode;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -49,6 +50,10 @@ class JavaSyncStatusContributor implements SyncStatusContributor {
 
   @Override
   public boolean handlesFile(BlazeProjectData projectData, VirtualFile file) {
+    boolean isGeneratedCode = file.getPath().contains(GeneratedCodeExtractor.GEN_PATH);
+    if(isGeneratedCode) {
+      return false;
+    }
     return projectData.getWorkspaceLanguageSettings().isLanguageActive(LanguageClass.JAVA)
         && file.getName().endsWith(".java");
   }
