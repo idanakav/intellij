@@ -106,6 +106,7 @@
     <projectService serviceInterface="com.google.idea.blaze.java.libraries.JarCacheFolderProvider"
         serviceImplementation="com.google.idea.blaze.java.libraries.JarCacheFolderProvider"/>
     <projectService serviceImplementation="com.google.idea.blaze.java.libraries.JarCache"/>
+    <projectService serviceImplementation="com.google.idea.blaze.java.sync.gen.GeneratedCodeCache"/>
 
     <attachSourcesProvider implementation="com.google.idea.blaze.java.libraries.AddLibraryTargetDirectoryToProjectViewAttachSourcesProvider"/>
     <attachSourcesProvider implementation="com.google.idea.blaze.java.libraries.BlazeAttachSourceProvider"/>
