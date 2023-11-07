@@ -3,12 +3,25 @@ package com.google.idea.blaze.java.sync.gen;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.idea.blaze.base.command.buildresult.BlazeArtifact;
+import com.google.idea.blaze.base.ideinfo.ArtifactLocation;
+import com.google.idea.blaze.base.ideinfo.JavaIdeInfo;
+import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
+import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.io.FileOperationProvider;
+import com.google.idea.blaze.base.model.BlazeProjectData;
+import com.google.idea.blaze.base.model.primitives.Label;
+import com.google.idea.blaze.base.model.primitives.LanguageClass;
+import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
+import com.google.idea.blaze.base.projectview.ProjectViewSet;
+import com.google.idea.blaze.base.settings.Blaze;
+import com.google.idea.blaze.base.sync.projectview.ProjectViewTargetImportFilter;
 import com.google.idea.common.experiments.BoolExperiment;
+import com.intellij.openapi.project.Project;
 import com.intellij.util.io.ZipUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.stream.Stream;
 
 /**
  * A Java and Kotlin generated code extractor
@@ -42,5 +55,20 @@ public class GeneratedCodeExtractor {
             }
         }
         return Futures.immediateVoidFuture();
+    }
+
+    static Stream<ArtifactLocation> generatedCodeArtifactsStream(JavaIdeInfo javaIdeInfo) {
+        Stream<ArtifactLocation> generatedSrcJarStream = javaIdeInfo.getSources()
+                .stream().filter(a -> a.getRelativePath().endsWith(".srcjar"));
+
+        Stream<ArtifactLocation> generatedJarsStream = javaIdeInfo.getGeneratedJars().stream()
+                .flatMap(artifact -> artifact.getSourceJars().stream());
+
+        return Stream.concat(generatedSrcJarStream, generatedJarsStream);
+    }
+
+    public static String extractKey(TargetIdeInfo ideInfo) {
+        Label label = ideInfo.getKey().getLabel();
+        return String.format("%s_%s", label.blazePackage().toString().replaceAll("/", "_"), label.targetName());
     }
 }

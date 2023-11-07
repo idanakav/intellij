@@ -54,6 +54,7 @@
     <BlazeCommandRunConfigurationHandlerProvider implementation="com.google.idea.blaze.java.run.BlazeJavaRunConfigurationHandlerProvider"/>
     <SettingsUiContributor implementation="com.google.idea.blaze.java.settings.BlazeJavaUserSettingsConfigurable$UiContributor"/>
     <FileCache implementation="com.google.idea.blaze.java.libraries.JarCache$FileCacheAdapter"/>
+    <FileCache implementation="com.google.idea.blaze.java.sync.gen.GeneratedCodeFileCache"/>
     <PrefetchFileSource implementation="com.google.idea.blaze.java.sync.JavaPrefetchFileSource"/>
     <BlazeTestEventsHandler implementation="com.google.idea.blaze.java.run.BlazeJavaTestEventsHandler"/>
     <AttributeSpecificStringLiteralReferenceProvider implementation="com.google.idea.blaze.java.lang.build.references.JavaClassQualifiedNameReference"/>
