@@ -75,6 +75,7 @@ import com.google.idea.blaze.java.AndroidBlazeRules;
 import com.google.idea.blaze.java.JavaBlazeRules;
 import com.google.idea.blaze.java.libraries.JarCache;
 import com.google.idea.blaze.java.sync.BlazeJavaSyncAugmenter;
+import com.google.idea.blaze.java.sync.gen.GeneratedCodeCache;
 import com.google.idea.blaze.java.sync.importer.emptylibrary.EmptyLibraryFilterSettings;
 import com.google.idea.blaze.java.sync.jdeps.MockJdepsMap;
 import com.google.idea.blaze.java.sync.model.BlazeContentEntry;
@@ -91,6 +92,7 @@ import com.google.idea.common.experiments.MockExperimentService;
 import com.intellij.openapi.extensions.impl.ExtensionPointImpl;
 import com.intellij.openapi.project.Project;
 import java.io.File;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -98,7 +100,10 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
+
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -169,6 +174,9 @@ public class BlazeJavaWorkspaceImporterTest extends BlazeTestCase {
   private MockFileOperationProvider fileOperationProvider;
   private MockExperimentService experimentService;
 
+  @Rule
+  public TemporaryFolder folder = new TemporaryFolder();
+
   @Override
   @SuppressWarnings("FunctionalInterfaceClash") // False positive on getDeclaredPackageOfJavaFile.
   protected void initTest(Container applicationServices, Container projectServices) {
@@ -190,6 +198,14 @@ public class BlazeJavaWorkspaceImporterTest extends BlazeTestCase {
 
     BlazeExecutor blazeExecutor = new MockBlazeExecutor();
     applicationServices.register(BlazeExecutor.class, blazeExecutor);
+    GeneratedCodeCache genCodeCache = new GeneratedCodeCache(() -> {
+      try {
+        return folder.newFolder();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    projectServices.register(GeneratedCodeCache.class, genCodeCache);
     projectServices.register(
         BlazeImportSettingsManager.class, new BlazeImportSettingsManager(project));
     BlazeImportSettingsManager.getInstance(getProject()).setImportSettings(DUMMY_IMPORT_SETTINGS);
@@ -348,7 +364,7 @@ public class BlazeJavaWorkspaceImporterTest extends BlazeTestCase {
     BlazeJavaImportResult result = importWorkspace(workspaceRoot, targetMapBuilder, projectView);
     assertThat(
             result.libraries.values().stream().map(BlazeJavaWorkspaceImporterTest::libraryFileName))
-        .containsExactly("lib-gen.jar");
+            .isEmpty();
   }
 
   /** Imports two binaries and a library. Only one binary should pass the package filter. */
@@ -1605,7 +1621,7 @@ public class BlazeJavaWorkspaceImporterTest extends BlazeTestCase {
             result.libraries.values().stream()
                 .map(BlazeJavaWorkspaceImporterTest::libraryFileName)
                 .collect(Collectors.toList()))
-        .containsExactly("source.jar", "generated.jar");
+        .containsExactly("source.jar");
   }
 
   /** Test that the plugin processor jars are included. */

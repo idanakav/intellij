@@ -6,17 +6,9 @@ import com.google.idea.blaze.base.command.buildresult.BlazeArtifact;
 import com.google.idea.blaze.base.ideinfo.ArtifactLocation;
 import com.google.idea.blaze.base.ideinfo.JavaIdeInfo;
 import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
-import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.io.FileOperationProvider;
-import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.primitives.Label;
-import com.google.idea.blaze.base.model.primitives.LanguageClass;
-import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
-import com.google.idea.blaze.base.projectview.ProjectViewSet;
-import com.google.idea.blaze.base.settings.Blaze;
-import com.google.idea.blaze.base.sync.projectview.ProjectViewTargetImportFilter;
 import com.google.idea.common.experiments.BoolExperiment;
-import com.intellij.openapi.project.Project;
 import com.intellij.util.io.ZipUtil;
 
 import java.io.File;
@@ -27,7 +19,7 @@ import java.util.stream.Stream;
  * A Java and Kotlin generated code extractor
  */
 public class GeneratedCodeExtractor {
-    public static final CharSequence GEN_PATH = "gen/src";
+    public static final String GEN_PATH = "gen/src";
     private static BoolExperiment extractGeneratedCode =
             new BoolExperiment("sync.extract.generated.code", true);
 
@@ -40,7 +32,7 @@ public class GeneratedCodeExtractor {
             return Futures.immediateVoidFuture();
         }
 
-        File genDir = new File(cache.getCachedGenDir(entry.key()), "gen/src");
+        File genDir = cache.getCachedGenSrcDir(entry.key());
         if (!fileOpProvider.exists(genDir) && !fileOpProvider.mkdirs(genDir)) {
             return Futures.immediateFailedFuture(new IOException("Fail to create cache dir " + genDir));
         }
@@ -55,6 +47,17 @@ public class GeneratedCodeExtractor {
             }
         }
         return Futures.immediateVoidFuture();
+    }
+
+    public static boolean hasGeneratedCode (TargetIdeInfo targetIdeInfo){
+        JavaIdeInfo javaIdeInfo = targetIdeInfo.getJavaIdeInfo();
+        if (javaIdeInfo == null) {
+            return false;
+        }
+
+        boolean hasGeneratedJars = !javaIdeInfo.getGeneratedJars().isEmpty();
+        boolean hasSrcJars = javaIdeInfo.getSources().stream().anyMatch(src -> src.getRelativePath().endsWith(".srcjar"));
+        return hasGeneratedJars || hasSrcJars;
     }
 
     static Stream<ArtifactLocation> generatedCodeArtifactsStream(JavaIdeInfo javaIdeInfo) {

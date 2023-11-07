@@ -153,6 +153,10 @@ public class GeneratedCodeCache {
         return new File(cacheDir, key);
     }
 
+    public File getCachedGenSrcDir(String key) {
+        return new File(cacheDir, String.format("%s/%s", key, GeneratedCodeExtractor.GEN_PATH));
+    }
+
     /** Whether the cache state is empty. */
     public boolean isEmpty() {
         return cacheState.isEmpty();

@@ -19,20 +19,14 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.HashMultiset;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Multiset;
-import com.google.common.collect.Sets;
+import com.google.common.collect.*;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.idea.blaze.base.ideinfo.ArtifactLocation;
 import com.google.idea.blaze.base.ideinfo.TargetKey;
+import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
 import com.google.idea.blaze.base.prefetch.FetchExecutor;
@@ -40,14 +34,20 @@ import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.scope.Scope;
 import com.google.idea.blaze.base.scope.scopes.TimingScope;
 import com.google.idea.blaze.base.scope.scopes.TimingScope.EventType;
+import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.blaze.base.sync.projectview.ImportRoots;
 import com.google.idea.blaze.base.sync.workspace.ArtifactLocationDecoder;
 import com.google.idea.blaze.base.util.PackagePrefixCalculator;
 import com.google.idea.blaze.common.PrintOutput;
+import com.google.idea.blaze.java.sync.gen.GeneratedCodeCache;
+import com.google.idea.blaze.java.sync.gen.GeneratedCodeExtractor;
 import com.google.idea.blaze.java.sync.model.BlazeContentEntry;
 import com.google.idea.blaze.java.sync.model.BlazeSourceDirectory;
 import com.intellij.openapi.project.Project;
+
+import javax.annotation.Nullable;
 import java.io.File;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -57,7 +57,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import javax.annotation.Nullable;
 
 /**
  * This is a utility class for calculating the java sources and their package prefixes given a
@@ -81,7 +80,8 @@ public final class SourceDirectoryCalculator {
       ArtifactLocationDecoder artifactLocationDecoder,
       ImportRoots importRoots,
       Collection<SourceArtifact> sources,
-      Map<TargetKey, ArtifactLocation> javaPackageManifests) {
+      Map<TargetKey, ArtifactLocation> javaPackageManifests,
+      TargetMap targetMap) {
 
     ManifestFilePackageReader manifestFilePackageReader =
         Scope.push(
@@ -125,7 +125,9 @@ public final class SourceDirectoryCalculator {
                     artifactLocationDecoder,
                     workspacePath,
                     sourcesUnderDirectoryRoot.get(workspacePath),
-                    javaPackageReaders);
+                    javaPackageReaders,
+                    targetMap,
+                    project);
             result.add(new BlazeContentEntry(contentRoot, sourceDirectories));
           }
           result.sort(Comparator.comparing(lhs -> lhs.contentRoot));
@@ -133,7 +135,20 @@ public final class SourceDirectoryCalculator {
     return ImmutableList.copyOf(result);
   }
 
-  private Collection<SourceArtifact> filterGeneratedArtifacts(
+    private ImmutableList<BlazeSourceDirectory> calculateGeneratedCodeDirectories(TargetMap targetMap, GeneratedCodeCache generatedCodeCache) {
+    return targetMap.targets().stream()
+            .filter(GeneratedCodeExtractor::hasGeneratedCode)
+            .map(GeneratedCodeExtractor::extractKey)
+            .map(generatedCodeCache::getCachedGenSrcDir)
+            .map(genPath -> BlazeSourceDirectory.builder(genPath)
+                    .setGenerated(true)
+                    .setResource(false)
+                    .setPackagePrefix("")
+                    .build())
+            .collect(ImmutableList.toImmutableList());
+    }
+
+    private Collection<SourceArtifact> filterGeneratedArtifacts(
       Collection<SourceArtifact> artifactLocations) {
     return artifactLocations.stream()
         .filter(sourceArtifact -> sourceArtifact.artifactLocation.isSource())
@@ -171,12 +186,14 @@ public final class SourceDirectoryCalculator {
 
   /** Calculates all source directories for a single content root. */
   private ImmutableList<BlazeSourceDirectory> calculateSourceDirectoriesForContentRoot(
-      BlazeContext context,
-      WorkspaceRoot workspaceRoot,
-      ArtifactLocationDecoder artifactLocationDecoder,
-      WorkspacePath directoryRoot,
-      Collection<SourceArtifact> sourceArtifacts,
-      Collection<JavaPackageReader> javaPackageReaders) {
+          BlazeContext context,
+          WorkspaceRoot workspaceRoot,
+          ArtifactLocationDecoder artifactLocationDecoder,
+          WorkspacePath directoryRoot,
+          Collection<SourceArtifact> sourceArtifacts,
+          Collection<JavaPackageReader> javaPackageReaders,
+          TargetMap targetMap,
+          Project project) {
 
     // Split out java-like files
     Predicate<ArtifactLocation> isSourceFile = JavaLikeLanguage.getSourceFileMatcher();
@@ -208,6 +225,15 @@ public final class SourceDirectoryCalculator {
               .build());
     }
 
+    if(GeneratedCodeExtractor.isEnabled()) {
+      try {
+        GeneratedCodeCache generatedCodeCache = GeneratedCodeCache.getInstance(project);
+        generatedCodeCache.getOrCreateCacheDir();
+        result.addAll(calculateGeneratedCodeDirectories(targetMap, generatedCodeCache));
+      } catch (IOException e) {
+        context.output(PrintOutput.log("Failed to create generated code cache directory"));
+      }
+    }
     result.sort(BlazeSourceDirectory.COMPARATOR);
     return ImmutableList.copyOf(result);
   }

@@ -48,6 +48,7 @@ import com.google.idea.blaze.common.PrintOutput;
 import com.google.idea.blaze.java.JavaBlazeRules;
 import com.google.idea.blaze.java.sync.BlazeJavaSyncAugmenter;
 import com.google.idea.blaze.java.sync.DuplicateSourceDetector;
+import com.google.idea.blaze.java.sync.gen.GeneratedCodeExtractor;
 import com.google.idea.blaze.java.sync.importer.emptylibrary.EmptyLibrary;
 import com.google.idea.blaze.java.sync.jdeps.JdepsMap;
 import com.google.idea.blaze.java.sync.model.BlazeContentEntry;
@@ -128,7 +129,8 @@ public final class BlazeJavaWorkspaceImporter {
             artifactLocationDecoder,
             importRoots,
             workspaceBuilder.sourceArtifacts,
-            workspaceBuilder.javaPackageManifests);
+            workspaceBuilder.javaPackageManifests,
+            targetMap);
 
     int totalContentEntryCount = 0;
     for (BlazeContentEntry contentEntry : contentEntries) {
@@ -302,10 +304,12 @@ public final class BlazeJavaWorkspaceImporter {
         workspaceBuilder.buildOutputJars.add(classJar);
       }
     }
-    if (augmenters.stream().allMatch(argument -> argument.shouldAttachGenJar(target))) {
-      javaIdeInfo.getGeneratedJars().stream()
-          .map(jar -> new BlazeJarLibrary(jar, targetKey))
-          .forEach(workspaceBuilder.generatedJarsFromSourceTargets::add);
+    if(!GeneratedCodeExtractor.isEnabled()) {
+      if (augmenters.stream().allMatch(argument -> argument.shouldAttachGenJar(target))) {
+        javaIdeInfo.getGeneratedJars().stream()
+            .map(jar -> new BlazeJarLibrary(jar, targetKey))
+            .forEach(workspaceBuilder.generatedJarsFromSourceTargets::add);
+      }
     }
     if (javaIdeInfo.getFilteredGenJar() != null) {
       workspaceBuilder.generatedJarsFromSourceTargets.add(

@@ -29,6 +29,8 @@ import com.google.idea.blaze.base.async.executor.MockBlazeExecutor;
 import com.google.idea.blaze.base.command.info.BlazeInfo;
 import com.google.idea.blaze.base.ideinfo.ArtifactLocation;
 import com.google.idea.blaze.base.ideinfo.TargetKey;
+import com.google.idea.blaze.base.ideinfo.TargetMap;
+import com.google.idea.blaze.base.ideinfo.TargetMapBuilder;
 import com.google.idea.blaze.base.io.FileOperationProvider;
 import com.google.idea.blaze.base.io.InputStreamProvider;
 import com.google.idea.blaze.base.io.MockInputStreamProvider;
@@ -50,20 +52,31 @@ import com.google.idea.blaze.base.sync.workspace.ArtifactLocationDecoder;
 import com.google.idea.blaze.base.sync.workspace.ArtifactLocationDecoderImpl;
 import com.google.idea.blaze.base.sync.workspace.MockArtifactLocationDecoder;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolverImpl;
+import com.google.idea.blaze.java.sync.gen.GeneratedCodeCache;
 import com.google.idea.blaze.java.sync.model.BlazeContentEntry;
 import com.google.idea.blaze.java.sync.model.BlazeSourceDirectory;
 import com.google.idea.common.experiments.ExperimentService;
 import com.google.idea.common.experiments.MockExperimentService;
+
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Test cases for {@link SourceDirectoryCalculator}. */
+/**
+ * Test cases for {@link SourceDirectoryCalculator}.
+ */
 @RunWith(JUnit4.class)
 public class SourceDirectoryCalculatorTest extends BlazeTestCase {
+
+  @Rule
+  public TemporaryFolder folder = new TemporaryFolder();
 
   private static final ImmutableMap<TargetKey, ArtifactLocation> NO_MANIFESTS = ImmutableMap.of();
   private static final Label LABEL = Label.create("//fake:label");
@@ -75,6 +88,7 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
   private final ErrorCollector issues = new ErrorCollector();
   private MockExperimentService experimentService;
 
+  private TargetMap targetMap = TargetMapBuilder.builder().build();
   private final WorkspaceRoot workspaceRoot = new WorkspaceRoot(new File("/root"));
   private final ArtifactLocationDecoder decoder =
       new MockArtifactLocationDecoder() {
@@ -108,6 +122,16 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
     applicationServices.register(
         RemoteArtifactPrefetcher.class, new MockRemoteArtifactPrefetcher());
 
+    GeneratedCodeCache genCodeCache = new GeneratedCodeCache(() -> {
+      try {
+        return folder.newFolder();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    projectServices.register(GeneratedCodeCache.class, genCodeCache);
+
+
     registerExtensionPoint(JavaLikeLanguage.EP_NAME, JavaLikeLanguage.class)
         .registerExtension(new JavaLikeLanguage.Java());
   }
@@ -124,7 +148,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google/app")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -148,7 +173,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("some/innocuous/path")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -181,7 +207,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     assertThat(result)
         .containsExactly(
             BlazeContentEntry.builder("/root/java/com/google")
@@ -223,7 +250,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
                 ImmutableList.of(new WorkspacePath("")),
                 ImmutableList.of(new WorkspacePath("excluded"))),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     assertThat(result)
         .containsExactly(
             BlazeContentEntry.builder("/root")
@@ -249,7 +277,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             decoder,
             buildImportRoots(ImmutableList.of(new WorkspacePath("")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     assertThat(result)
         .containsExactly(
             BlazeContentEntry.builder("/root")
@@ -280,7 +309,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -322,7 +352,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -374,7 +405,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             decoder,
             buildImportRoots(ImmutableList.of(new WorkspacePath("")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -423,7 +455,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             decoder,
             buildImportRoots(ImmutableList.of(new WorkspacePath("")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -470,7 +503,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -516,7 +550,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -562,7 +597,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -599,7 +635,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -632,7 +669,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -665,7 +703,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/org")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     assertThat(result)
         .containsExactly(
             BlazeContentEntry.builder("/root/java/com/org")
@@ -696,7 +735,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
         buildImportRoots(
             ImmutableList.of(new WorkspacePath("java/com/google/my")), ImmutableList.of()),
         sourceArtifacts,
-        NO_MANIFESTS);
+        NO_MANIFESTS,
+        targetMap);
     issues.assertNoIssues();
   }
 
@@ -719,7 +759,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
         buildImportRoots(
             ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
         sourceArtifacts,
-        NO_MANIFESTS);
+        NO_MANIFESTS,
+        targetMap);
 
     issues.assertIssueContaining("No package name string found");
   }
@@ -771,7 +812,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -812,7 +854,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -864,7 +907,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -912,7 +956,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -963,7 +1008,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google/android")), ImmutableList.of()),
             sourceArtifacts,
-            NO_MANIFESTS);
+            NO_MANIFESTS,
+            targetMap);
     issues.assertNoIssues();
     assertThat(result)
         .containsExactly(
@@ -1140,7 +1186,8 @@ public class SourceDirectoryCalculatorTest extends BlazeTestCase {
             buildImportRoots(
                 ImmutableList.of(new WorkspacePath("java/com/google")), ImmutableList.of()),
             sourceArtifacts,
-            manifests);
+            manifests,
+            targetMap);
 
     issues.assertNoIssues();
     assertThat(result)
