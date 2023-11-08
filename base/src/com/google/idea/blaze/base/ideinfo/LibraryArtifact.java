@@ -38,8 +38,8 @@ public final class LibraryArtifact implements ProtoWrapper<IntellijIdeInfo.Libra
       @Nullable ArtifactLocation interfaceJar,
       @Nullable ArtifactLocation classJar,
       ImmutableList<ArtifactLocation> sourceJars) {
-    if (interfaceJar == null && classJar == null) {
-      throw new IllegalArgumentException("Interface and class jars cannot both be null.");
+    if (interfaceJar == null && classJar == null && sourceJars.isEmpty()) {
+      throw new IllegalArgumentException("Interface, class and sources jars cannot all null/empty.");
     }
     this.interfaceJar = interfaceJar;
     this.classJar = classJar;
