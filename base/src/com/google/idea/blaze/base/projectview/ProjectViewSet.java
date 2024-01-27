@@ -18,6 +18,7 @@ package com.google.idea.blaze.base.projectview;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.idea.blaze.base.projectview.section.ListSection;
 import com.google.idea.blaze.base.projectview.section.ScalarSection;
 import com.google.idea.blaze.base.projectview.section.Section;
@@ -31,6 +32,8 @@ import javax.annotation.Nullable;
 
 /** A collection of project views and their file names. */
 public final class ProjectViewSet implements Serializable {
+
+  public static final ProjectViewSet EMPTY = builder().build();
   private static final long serialVersionUID = 2L;
 
   private final ImmutableList<ProjectViewFile> projectViewFiles;
@@ -49,10 +52,12 @@ public final class ProjectViewSet implements Serializable {
   }
 
   /** Returns all values from all scalar sections in the project views, in order */
-  public <T> List<T> listScalarItems(SectionKey<T, ScalarSection<T>> key) {
+  public <T> List<T> listScalarItems(SectionKey<T, ScalarSection<T>>... keys) {
     List<T> result = Lists.newArrayList();
-    for (ScalarSection<T> section : getSections(key)) {
-      result.add(section.getValue());
+    for (SectionKey<T, ScalarSection<T>> key: keys) {
+      for (ScalarSection<T> section : getSections(key)) {
+        result.add(section.getValue());
+      }
     }
     return result;
   }
@@ -105,15 +110,18 @@ public final class ProjectViewSet implements Serializable {
   public static class Builder {
     ImmutableList.Builder<ProjectViewFile> projectViewFiles = ImmutableList.builder();
 
+    @CanIgnoreReturnValue
     public Builder add(ProjectView projectView) {
       return add(null, projectView);
     }
 
+    @CanIgnoreReturnValue
     public Builder add(@Nullable File projectViewFile, ProjectView projectView) {
       projectViewFiles.add(new ProjectViewFile(projectView, projectViewFile));
       return this;
     }
 
+    @CanIgnoreReturnValue
     public Builder addAll(Collection<ProjectViewFile> projectViewFiles) {
       this.projectViewFiles.addAll(projectViewFiles);
       return this;

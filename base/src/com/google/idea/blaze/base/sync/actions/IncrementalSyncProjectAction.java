@@ -15,7 +15,11 @@
  */
 package com.google.idea.blaze.base.sync.actions;
 
+import com.google.idea.blaze.base.logging.utils.querysync.QuerySyncActionStatsScope;
+import com.google.idea.blaze.base.qsync.QuerySyncManager;
+import com.google.idea.blaze.base.qsync.QuerySyncManager.TaskOrigin;
 import com.google.idea.blaze.base.settings.Blaze;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.settings.BlazeUserSettings;
 import com.google.idea.blaze.base.sync.BlazeSyncManager;
 import com.google.idea.blaze.base.sync.status.BlazeSyncStatus;
@@ -36,8 +40,18 @@ public class IncrementalSyncProjectAction extends BlazeProjectSyncAction {
 
   @Override
   protected void runSync(Project project, AnActionEvent e) {
-    BlazeSyncManager.getInstance(project)
-        .incrementalProjectSync(/* reason= */ "IncrementalSyncProjectAction");
+    if (Blaze.getProjectType(project) == ProjectType.QUERY_SYNC) {
+      QuerySyncManager qsm = QuerySyncManager.getInstance(project);
+      QuerySyncActionStatsScope scope = QuerySyncActionStatsScope.create(getClass(), e);
+      if (!qsm.isProjectLoaded()) {
+        qsm.onStartup(scope);
+      } else {
+        qsm.deltaSync(scope, TaskOrigin.USER_ACTION);
+      }
+    } else {
+      BlazeSyncManager.getInstance(project)
+          .incrementalProjectSync(/* reason= */ "IncrementalSyncProjectAction");
+    }
   }
 
   @Override
@@ -49,9 +63,12 @@ public class IncrementalSyncProjectAction extends BlazeProjectSyncAction {
     Project project = e.getProject();
     Presentation presentation = e.getPresentation();
     BlazeSyncStatus statusHelper = BlazeSyncStatus.getInstance(project);
+    presentation.setEnabled(!statusHelper.syncInProgress());
+    if (Blaze.getProjectType(project) == ProjectType.QUERY_SYNC) {
+      return;
+    }
     BlazeSyncStatus.SyncStatus status = statusHelper.getStatus();
     presentation.setIcon(getIcon(status));
-    presentation.setEnabled(!statusHelper.syncInProgress());
 
     if (status == BlazeSyncStatus.SyncStatus.DIRTY
         && !BlazeUserSettings.getInstance().getSyncStatusPopupShown()) {
@@ -87,5 +104,10 @@ public class IncrementalSyncProjectAction extends BlazeProjectSyncAction {
             NotificationType.INFORMATION);
     notification.setImportant(true);
     Notifications.Bus.notify(notification, project);
+  }
+
+  @Override
+  protected QuerySyncStatus querySyncSupport() {
+    return QuerySyncStatus.SUPPORTED;
   }
 }

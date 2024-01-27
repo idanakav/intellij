@@ -15,13 +15,9 @@
  */
 package com.google.idea.blaze.android.run.test;
 
-import com.android.tools.idea.run.ConsolePrinter;
-import com.android.tools.idea.run.tasks.LaunchContext;
-import com.android.tools.idea.run.tasks.LaunchResult;
-import com.android.tools.idea.run.tasks.LaunchTask;
-import com.android.tools.idea.run.tasks.LaunchTaskDurations;
-import com.android.tools.idea.run.util.LaunchStatus;
-import com.android.tools.idea.run.util.ProcessHandlerLaunchStatus;
+import com.android.tools.idea.run.blaze.BlazeLaunchContext;
+import com.android.tools.idea.run.blaze.BlazeLaunchTask;
+import com.android.tools.idea.run.configuration.execution.ExecutionUtils;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.idea.blaze.base.async.executor.BlazeExecutor;
 import com.google.idea.blaze.base.async.process.ExternalTask;
@@ -29,6 +25,9 @@ import com.google.idea.blaze.base.async.process.LineProcessingOutputStream;
 import com.google.idea.blaze.base.command.BlazeCommand;
 import com.google.idea.blaze.base.command.BlazeCommandName;
 import com.google.idea.blaze.base.command.BlazeFlags;
+import com.google.idea.blaze.base.command.buildresult.BuildResultHelper;
+import com.google.idea.blaze.base.command.buildresult.BuildResultHelper.GetArtifactsException;
+import com.google.idea.blaze.base.command.buildresult.BuildResultHelperBep;
 import com.google.idea.blaze.base.filecache.FileCaches;
 import com.google.idea.blaze.base.ideinfo.AndroidInstrumentationInfo;
 import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
@@ -38,9 +37,8 @@ import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
 import com.google.idea.blaze.base.projectview.ProjectViewManager;
 import com.google.idea.blaze.base.projectview.ProjectViewSet;
-import com.google.idea.blaze.base.scope.BlazeContext;
+import com.google.idea.blaze.base.run.testlogs.BlazeTestResultHolder;
 import com.google.idea.blaze.base.scope.Scope;
-import com.google.idea.blaze.base.scope.ScopedFunction;
 import com.google.idea.blaze.base.scope.output.IssueOutput;
 import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.sync.aspects.BlazeBuildOutputs;
@@ -51,11 +49,11 @@ import com.google.idea.blaze.java.AndroidBlazeRules.RuleTypes;
 import com.intellij.execution.process.ProcessAdapter;
 import com.intellij.execution.process.ProcessEvent;
 import com.intellij.execution.process.ProcessHandler;
+import com.intellij.execution.ui.ConsoleView;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.ide.PooledThreadExecutor;
@@ -64,7 +62,7 @@ import org.jetbrains.ide.PooledThreadExecutor;
  * An Android application launcher that invokes `blaze test` on an android_test target, and sets up
  * process handling and debugging for the test run.
  */
-public class BlazeAndroidTestLaunchTask implements LaunchTask {
+public class BlazeAndroidTestLaunchTask implements BlazeLaunchTask {
   private static final String ID = "BLAZE_ANDROID_TEST";
 
   // Uses a local device/emulator attached to adb to run an android_test.
@@ -80,10 +78,11 @@ public class BlazeAndroidTestLaunchTask implements LaunchTask {
   private final Label target;
   private final List<String> buildFlags;
   private final BlazeAndroidTestFilter testFilter;
+  private final BlazeTestResultHolder testResultsHolder;
 
   private ListenableFuture<Boolean> blazeResult;
 
-  private final BlazeAndroidTestRunContextBase runContext;
+  private final BlazeAndroidTestRunContext runContext;
 
   private final boolean debug;
 
@@ -92,118 +91,115 @@ public class BlazeAndroidTestLaunchTask implements LaunchTask {
       Label target,
       List<String> buildFlags,
       BlazeAndroidTestFilter testFilter,
-      BlazeAndroidTestRunContextBase runContext,
-      boolean debug) {
+      BlazeAndroidTestRunContext runContext,
+      boolean debug,
+      BlazeTestResultHolder testResultsHolder) {
     this.project = project;
     this.target = target;
     this.buildFlags = buildFlags;
     this.testFilter = testFilter;
     this.runContext = runContext;
     this.debug = debug;
-  }
-
-  @NotNull
-  @Override
-  public String getDescription() {
-    return String.format("Running %s tests", Blaze.buildSystemName(project));
+    this.testResultsHolder = testResultsHolder;
   }
 
   @Override
-  public int getDuration() {
-    return LaunchTaskDurations.LAUNCH_ACTIVITY;
-  }
-
-  @Override
-  public LaunchResult run(@NotNull LaunchContext launchContext) {
+  public void run(@NotNull BlazeLaunchContext launchContext)
+      throws com.intellij.execution.ExecutionException {
     BlazeExecutor blazeExecutor = BlazeExecutor.getInstance();
 
-    ProcessHandlerLaunchStatus processHandlerLaunchStatus =
-        (ProcessHandlerLaunchStatus) launchContext.getLaunchStatus();
-    final ProcessHandler processHandler = processHandlerLaunchStatus.getProcessHandler();
+    final ProcessHandler processHandler = launchContext.getProcessHandler();
 
     blazeResult =
         blazeExecutor.submit(
-            new Callable<Boolean>() {
-              @Override
-              public Boolean call() throws Exception {
-                return Scope.root(
-                    new ScopedFunction<Boolean>() {
-                      @Override
-                      public Boolean execute(@NotNull BlazeContext context) {
-                        ProjectViewSet projectViewSet =
-                            ProjectViewManager.getInstance(project).getProjectViewSet();
-                        if (projectViewSet == null) {
-                          IssueOutput.error("Could not load project view. Please resync project.")
-                              .submit(context);
-                          return false;
-                        }
+            () ->
+                Scope.root(
+                    context -> {
+                      SaveUtil.saveAllFiles();
 
-                        BlazeProjectData projectData =
-                            BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
-                        TargetIdeInfo targetInfo =
-                            projectData.getTargetMap().get(TargetKey.forPlainTarget(target));
-                        if (targetInfo == null
-                            || targetInfo.getKind()
-                                != RuleTypes.ANDROID_INSTRUMENTATION_TEST.getKind()) {
-                          IssueOutput.error(
-                                  "Unable to identify target \""
-                                      + target
-                                      + "\". If this is a newly added target, please sync the"
-                                      + " project and try again.")
-                              .submit(context);
-                          return null;
-                        }
-                        AndroidInstrumentationInfo testInstrumentationInfo =
-                            targetInfo.getAndroidInstrumentationInfo();
-                        if (testInstrumentationInfo == null) {
-                          IssueOutput.error(
-                                  "Required target data missing for \""
-                                      + target
-                                      + "\".  Has the target definition changed recently? Please"
-                                      + " sync the project and try again.")
-                              .submit(context);
-                        }
-                        Label targetDevice = testInstrumentationInfo.getTargetDevice();
+                      ProjectViewSet projectViewSet =
+                          ProjectViewManager.getInstance(project).getProjectViewSet();
+                      if (projectViewSet == null) {
+                        IssueOutput.error("Could not load project view. Please resync project.")
+                            .submit(context);
+                        return false;
+                      }
 
-                        BlazeCommand.Builder commandBuilder =
-                            BlazeCommand.builder(
-                                    Blaze.getBuildSystemProvider(project).getBinaryPath(project),
-                                    BlazeCommandName.TEST)
-                                .addTargets(target);
-                        // Build flags must match BlazeBeforeRunTask.
-                        commandBuilder.addBlazeFlags(buildFlags);
-                        // Run the test on the selected local device/emulator if no target device is
-                        // specified.
-                        if (targetDevice == null) {
-                          commandBuilder
-                              .addBlazeFlags(TEST_LOCAL_DEVICE, BlazeFlags.TEST_OUTPUT_STREAMED)
-                              .addBlazeFlags(
-                                  testDeviceSerialFlags(
-                                      launchContext.getDevice().getSerialNumber()))
-                              .addBlazeFlags(testFilter.getBlazeFlags());
-                        }
-                        if (debug) {
-                          commandBuilder.addBlazeFlags(
-                              TEST_DEBUG, BlazeFlags.NO_CACHE_TEST_RESULTS);
-                        }
+                      BlazeProjectData projectData =
+                          BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
+                      TargetIdeInfo targetInfo =
+                          projectData.getTargetMap().get(TargetKey.forPlainTarget(target));
+                      if (targetInfo == null
+                          || targetInfo.getKind()
+                              != RuleTypes.ANDROID_INSTRUMENTATION_TEST.getKind()) {
+                        IssueOutput.error(
+                                "Unable to identify target \""
+                                    + target
+                                    + "\". If this is a newly added target, please sync the"
+                                    + " project and try again.")
+                            .submit(context);
+                        return null;
+                      }
+                      AndroidInstrumentationInfo testInstrumentationInfo =
+                          targetInfo.getAndroidInstrumentationInfo();
+                      if (testInstrumentationInfo == null) {
+                        IssueOutput.error(
+                                "Required target data missing for \""
+                                    + target
+                                    + "\".  Has the target definition changed recently? Please"
+                                    + " sync the project and try again.")
+                            .submit(context);
+                        return null;
+                      }
+
+                      BlazeCommand.Builder commandBuilder =
+                          BlazeCommand.builder(
+                                  Blaze.getBuildSystemProvider(project)
+                                      .getBuildSystem()
+                                      .getBuildInvoker(project, context),
+                                  BlazeCommandName.TEST)
+                              .addTargets(target);
+                      // Build flags must match BlazeBeforeRunTask.
+                      commandBuilder.addBlazeFlags(buildFlags);
+
+                      // Run the test on the selected local device/emulator if no target device is
+                      // specified.
+                      Label targetDevice = testInstrumentationInfo.getTargetDevice();
+                      if (targetDevice == null) {
+                        commandBuilder
+                            .addBlazeFlags(TEST_LOCAL_DEVICE, BlazeFlags.TEST_OUTPUT_STREAMED)
+                            .addBlazeFlags(
+                                testDeviceSerialFlags(launchContext.getDevice().getSerialNumber()))
+                            .addBlazeFlags(testFilter.getBlazeFlags());
+                      }
+
+                      if (debug) {
+                        commandBuilder.addBlazeFlags(TEST_DEBUG, BlazeFlags.NO_CACHE_TEST_RESULTS);
+                      }
+
+                      ConsoleView console = launchContext.getConsoleView();
+                      LineProcessingOutputStream.LineProcessor stdoutLineProcessor =
+                          line -> {
+                            ExecutionUtils.println(console, line);
+                            return true;
+                          };
+                      LineProcessingOutputStream.LineProcessor stderrLineProcessor =
+                          line -> {
+                            ExecutionUtils.println(console, line);
+                            return true;
+                          };
+
+                      ExecutionUtils.println(
+                          console,
+                          String.format("Starting %s test...\n", Blaze.buildSystemName(project)));
+
+                      int retVal;
+                      try (BuildResultHelper buildResultHelper = new BuildResultHelperBep()) {
+                        commandBuilder.addBlazeFlags(buildResultHelper.getBuildFlags());
                         BlazeCommand command = commandBuilder.build();
+                        ExecutionUtils.println(console, command + "\n");
 
-                        ConsolePrinter printer = launchContext.getConsolePrinter();
-                        printer.stdout(
-                            String.format("Starting %s test...\n", Blaze.buildSystemName(project)));
-                        printer.stdout(command + "\n");
-                        LineProcessingOutputStream.LineProcessor stdoutLineProcessor =
-                            line -> {
-                              printer.stdout(line);
-                              return true;
-                            };
-                        LineProcessingOutputStream.LineProcessor stderrLineProcessor =
-                            line -> {
-                              printer.stderr(line);
-                              return true;
-                            };
-                        SaveUtil.saveAllFiles();
-                        int retVal =
+                        retVal =
                             ExternalTask.builder(WorkspaceRoot.fromProject(project))
                                 .addBlazeCommand(command)
                                 .context(context)
@@ -211,35 +207,30 @@ public class BlazeAndroidTestLaunchTask implements LaunchTask {
                                 .stderr(LineProcessingOutputStream.of(stderrLineProcessor))
                                 .build()
                                 .run();
+
+                        if (retVal != 0) {
+                          context.setHasError();
+                        } else {
+                          testResultsHolder.setTestResults(
+                              buildResultHelper.getTestResults(Optional.empty()));
+                        }
                         ListenableFuture<Void> unusedFuture =
                             FileCaches.refresh(
                                 project,
                                 context,
                                 BlazeBuildOutputs.noOutputs(BuildResult.fromExitCode(retVal)));
-
-                        if (retVal != 0) {
-                          context.setHasError();
-                        }
-
-                        return !context.hasErrors();
+                      } catch (GetArtifactsException e) {
+                        LOG.error(e.getMessage());
                       }
-                    });
-              }
-            });
+                      return !context.hasErrors();
+                    }));
 
     blazeResult.addListener(runContext::onLaunchTaskComplete, PooledThreadExecutor.INSTANCE);
 
     // The debug case is set up in ConnectBlazeTestDebuggerTask
     if (!debug) {
-      waitAndSetUpForKillingBlazeOnStop(processHandler, launchContext.getLaunchStatus());
+      waitAndSetUpForKillingBlazeOnStop(processHandler);
     }
-    return LaunchResult.success();
-  }
-
-  @NotNull
-  @Override
-  public String getId() {
-    return ID;
   }
 
   /**
@@ -247,31 +238,23 @@ public class BlazeAndroidTestLaunchTask implements LaunchTask {
    * Blaze process to stop. In non-debug mode, we wait for test execution to finish before returning
    * from launch() (this matches the behavior of the stock ddmlib runner).
    */
-  private void waitAndSetUpForKillingBlazeOnStop(
-      @NotNull final ProcessHandler processHandler, @NotNull final LaunchStatus launchStatus) {
+  @SuppressWarnings("Interruption")
+  private void waitAndSetUpForKillingBlazeOnStop(@NotNull final ProcessHandler processHandler) {
     processHandler.addProcessListener(
         new ProcessAdapter() {
           @Override
           public void processWillTerminate(ProcessEvent event, boolean willBeDestroyed) {
             blazeResult.cancel(true /* mayInterruptIfRunning */);
-            launchStatus.terminateLaunch("Test run stopped.\n", true);
           }
         });
 
     try {
       blazeResult.get();
-      launchStatus.terminateLaunch("Tests ran to completion.\n", true);
-    } catch (CancellationException e) {
-      // The user has canceled the test.
-      launchStatus.terminateLaunch("Test run stopped.\n", true);
     } catch (InterruptedException e) {
       // We've been interrupted - cancel the underlying Blaze process.
       blazeResult.cancel(true /* mayInterruptIfRunning */);
-      launchStatus.terminateLaunch("Test run stopped.\n", true);
     } catch (ExecutionException e) {
       LOG.error(e);
-      launchStatus.terminateLaunch(
-          "Test run stopped due to internal exception. Please file a bug report.\n", true);
     }
   }
 

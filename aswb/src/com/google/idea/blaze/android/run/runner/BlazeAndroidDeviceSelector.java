@@ -13,158 +13,63 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.google.idea.blaze.android.run.runner;
 
-import com.android.tools.idea.run.AndroidSessionInfo;
+import com.android.tools.idea.execution.common.AndroidSessionInfo;
 import com.android.tools.idea.run.DeviceFutures;
 import com.android.tools.idea.run.editor.DeployTarget;
+import com.google.common.annotations.VisibleForTesting;
 import com.intellij.execution.ExecutionException;
 import com.intellij.execution.Executor;
 import com.intellij.execution.runners.ExecutionEnvironment;
-import com.intellij.icons.AllIcons;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.ui.DialogWrapper;
-import com.intellij.openapi.ui.Messages;
 import javax.annotation.Nullable;
-import org.jetbrains.android.facet.AndroidFacet;
 
 /** Selects a device. */
 public interface BlazeAndroidDeviceSelector {
-
   /** A device session */
   class DeviceSession {
     @Nullable public final DeployTarget deployTarget;
     @Nullable public final DeviceFutures deviceFutures;
-    @Nullable public final AndroidSessionInfo sessionInfo;
 
+    public DeviceSession(
+        @Nullable DeployTarget deployTarget, @Nullable DeviceFutures deviceFutures) {
+      this.deployTarget = deployTarget;
+      this.deviceFutures = deviceFutures;
+    }
+
+    // Only for back compat
+    @VisibleForTesting
     public DeviceSession(
         @Nullable DeployTarget deployTarget,
         @Nullable DeviceFutures deviceFutures,
         @Nullable AndroidSessionInfo sessionInfo) {
-      this.deployTarget = deployTarget;
-      this.deviceFutures = deviceFutures;
-      this.sessionInfo = sessionInfo;
+      this(deployTarget, deviceFutures);
     }
   }
 
   DeviceSession getDevice(
-      Project project,
-      AndroidFacet facet,
-      Executor executor,
-      ExecutionEnvironment env,
-      AndroidSessionInfo info,
-      boolean debug,
-      int runConfigId)
+      Project project, Executor executor, ExecutionEnvironment env, boolean debug, int runConfigId)
       throws ExecutionException;
-
   /** Standard device selector */
   class NormalDeviceSelector implements BlazeAndroidDeviceSelector {
-
-    private static final DialogWrapper.DoNotAskOption ourKillLaunchOption =
-        new KillLaunchDialogOption();
-    private static final Logger LOG = Logger.getInstance(NormalDeviceSelector.class);
-
-    static class KillLaunchDialogOption implements DialogWrapper.DoNotAskOption {
-      private boolean show;
-
-      @Override
-      public boolean isToBeShown() {
-        return !show;
-      }
-
-      @Override
-      public void setToBeShown(boolean toBeShown, int exitCode) {
-        show = !toBeShown;
-      }
-
-      @Override
-      public boolean canBeHidden() {
-        return true;
-      }
-
-      @Override
-      public boolean shouldSaveOptionsOnCancel() {
-        return true;
-      }
-
-      @Override
-      public String getDoNotShowMessage() {
-        return "Do not ask again";
-      }
-    }
-
     @Override
     public DeviceSession getDevice(
         Project project,
-        AndroidFacet facet,
         Executor executor,
         ExecutionEnvironment env,
-        AndroidSessionInfo info,
         boolean debug,
-        int runConfigId)
-        throws ExecutionException {
-      // If there is an existing session, then terminate those sessions
-      if (info != null) {
-        boolean continueLaunch = promptAndKillSession(executor, project, info);
-        if (!continueLaunch) {
-          return null;
-        }
-      }
-
+        int runConfigId) {
       DeployTarget deployTarget = BlazeDeployTargetService.getInstance(project).getDeployTarget();
       if (deployTarget == null) {
         return null;
       }
-
       DeviceFutures deviceFutures = null;
       if (!deployTarget.hasCustomRunProfileState(executor)) {
-        deviceFutures = deployTarget.getDevices(facet);
+        deviceFutures = deployTarget.getDevices(project);
       }
-      return new DeviceSession(deployTarget, deviceFutures, info);
-    }
-
-    private boolean promptAndKillSession(
-        Executor executor, Project project, AndroidSessionInfo info) {
-      String previousExecutor = info.getExecutorId();
-      String currentExecutor = executor.getId();
-
-      if (ourKillLaunchOption.isToBeShown()) {
-        String msg;
-        String noText;
-        if (previousExecutor.equals(currentExecutor)) {
-          msg =
-              String.format(
-                  "Restart App?\nThe app is already running. "
-                      + "Would you like to kill it and restart the session?");
-          noText = "Cancel";
-        } else {
-          msg =
-              String.format(
-                  "To switch from %1$s to %2$s, the app has to restart. Continue?",
-                  previousExecutor, currentExecutor);
-          noText = "Cancel " + currentExecutor;
-        }
-
-        String targetName = info.getExecutionTarget().getDisplayName();
-        String title = "Launching " + targetName;
-        String yesText = "Restart " + targetName;
-        if (Messages.NO
-            == Messages.showYesNoDialog(
-                project,
-                msg,
-                title,
-                yesText,
-                noText,
-                AllIcons.General.QuestionDialog,
-                ourKillLaunchOption)) {
-          return false;
-        }
-      }
-
-      LOG.info("Disconnecting existing session of the same launch configuration");
-      info.getProcessHandler().detachProcess();
-      return true;
+      return new DeviceSession(deployTarget, deviceFutures);
     }
   }
 }

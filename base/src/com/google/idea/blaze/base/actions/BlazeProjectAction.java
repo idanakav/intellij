@@ -15,6 +15,9 @@
  */
 package com.google.idea.blaze.base.actions;
 
+import static com.google.idea.blaze.base.actions.BlazeProjectAction.QuerySyncStatus.HIDDEN;
+import static com.google.idea.blaze.base.actions.BlazeProjectAction.QuerySyncStatus.REQUIRED;
+
 import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.settings.BuildSystemName;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -25,6 +28,27 @@ import javax.swing.Icon;
 
 /** Base class action that hides for non-blaze projects. */
 public abstract class BlazeProjectAction extends AnAction {
+  /** Indicates if an action supports querysync. */
+  protected enum QuerySyncStatus {
+    /**
+     * The action does not support querysync, and is not ever expected to. It's not visible in the
+     * UI.
+     */
+    HIDDEN,
+    /**
+     * The action may support querysync in future, but does not yet. It is visible in the UI, but
+     * disabled.
+     *
+     * @deprecated All existing users should migrate to another of the enum values instead.
+     */
+    @Deprecated
+    DISABLED,
+    /** The action supports querysync and is available in the UI. */
+    SUPPORTED,
+    /** The action requires querysync in order to be usable. */
+    REQUIRED,
+  }
+
   protected BlazeProjectAction() {}
 
   protected BlazeProjectAction(Icon icon) {
@@ -43,12 +67,39 @@ public abstract class BlazeProjectAction extends AnAction {
   @Override
   public final void update(AnActionEvent e) {
     Project project = e.getProject();
-    if (project == null || !Blaze.isBlazeProject(project)) {
+    if (project == null) {
       e.getPresentation().setEnabledAndVisible(false);
       return;
     }
-
-    e.getPresentation().setEnabledAndVisible(true);
+    switch (Blaze.getProjectType(project)) {
+      case UNKNOWN:
+        e.getPresentation().setEnabledAndVisible(false);
+        return;
+      case QUERY_SYNC:
+        switch (querySyncSupport()) {
+          case HIDDEN:
+            e.getPresentation().setEnabledAndVisible(false);
+            return;
+          case DISABLED:
+            e.getPresentation().setVisible(true);
+            e.getPresentation().setEnabled(false);
+            return;
+          case REQUIRED:
+          case SUPPORTED:
+            e.getPresentation().setEnabledAndVisible(true);
+            break;
+        }
+        break;
+      case ASPECT_SYNC:
+        switch (querySyncSupport()) {
+          case REQUIRED:
+            e.getPresentation().setEnabledAndVisible(false);
+            return;
+          default:
+            e.getPresentation().setEnabledAndVisible(true);
+        }
+        break;
+    }
 
     if (!compatibleBuildSystem(project)) {
       e.getPresentation().setEnabled(false);
@@ -66,6 +117,11 @@ public abstract class BlazeProjectAction extends AnAction {
     }
     actionPerformedInBlazeProject(project, anActionEvent);
   }
+
+  protected abstract QuerySyncStatus querySyncSupport(); /* {
+    // Default to disabled, meaning that the action has not yet been updated for querysync.
+    return QuerySyncStatus.DISABLED;
+  }*/
 
   protected void updateForBlazeProject(Project project, AnActionEvent e) {}
 

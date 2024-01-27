@@ -62,9 +62,18 @@ public final class FileGitHubIssueAction extends BlazeProjectAction {
   private static final NotNullLazyValue<Boolean> isCorpMachine =
       NotNullLazyValue.createValue(
           () -> {
-            int retVal = ExternalTask.builder().args("glogin", "-version").build().run();
+            String which = SystemInfo.isWindows ? "where" : "which";
+            int retVal = ExternalTask.builder().args(which, "glogin").build().run();
+            if (retVal == 0) {
+              retVal = ExternalTask.builder().args("glogin", "-version").build().run();
+            }
             return retVal == 0;
           });
+
+  @Override
+  protected QuerySyncStatus querySyncSupport() {
+    return QuerySyncStatus.SUPPORTED;
+  }
 
   @Override
   protected void updateForBlazeProject(Project project, AnActionEvent e) {

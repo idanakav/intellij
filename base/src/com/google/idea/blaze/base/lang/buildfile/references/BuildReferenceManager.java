@@ -26,10 +26,10 @@ import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.TargetName;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
 import com.google.idea.blaze.base.settings.Blaze;
+import com.google.idea.blaze.base.sync.projectview.ImportRoots;
 import com.google.idea.blaze.base.sync.workspace.WorkspaceHelper;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolver;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolverProvider;
-import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.io.FileUtil;
@@ -49,13 +49,18 @@ import javax.annotation.Nullable;
 public class BuildReferenceManager {
 
   public static BuildReferenceManager getInstance(Project project) {
-    return ServiceManager.getService(project, BuildReferenceManager.class);
+    return project.getService(BuildReferenceManager.class);
   }
 
   private final Project project;
 
+  private IgnoredDirectories ignoredDirectories;
+
   public BuildReferenceManager(Project project) {
     this.project = project;
+    if (ImportRoots.forProjectSafe(project) != null) {
+      this.ignoredDirectories = new IgnoredDirectories(ImportRoots.forProjectSafe(project));
+    }
   }
 
   /** Finds the PSI element associated with the given label. */
@@ -159,6 +164,7 @@ public class BuildReferenceManager {
     if (vf == null || !vf.isDirectory()) {
       return BuildLookupElement.EMPTY_ARRAY;
     }
+
     BuildLookupElement[] uniqueLookup = new BuildLookupElement[1];
     while (true) {
       VirtualFile[] children = vf.getChildren();
@@ -168,7 +174,9 @@ public class BuildReferenceManager {
       List<VirtualFile> validChildren = Lists.newArrayListWithCapacity(children.length);
       for (VirtualFile child : children) {
         ProgressManager.checkCanceled();
-        if (child.getName().startsWith(pathFragment) && lookupData.acceptFile(project, child)) {
+        if (child.getName().startsWith(pathFragment)
+            && lookupData.acceptFile(project, child)
+            && (ignoredDirectories == null || !ignoredDirectories.shouldIgnore(child))) {
           validChildren.add(child);
         }
       }
@@ -256,5 +264,22 @@ public class BuildReferenceManager {
     }
     String rulePathParent = PathUtil.getParentPath(targetName.toString());
     return new File(packageFile, rulePathParent);
+  }
+
+  private class IgnoredDirectories {
+    private ImportRoots importRoots;
+
+    public IgnoredDirectories(ImportRoots importRoots) {
+      this.importRoots = importRoots;
+    }
+
+    public Boolean shouldIgnore(VirtualFile vf) {
+      for (WorkspacePath excludeDirectory : importRoots.excludeDirectories()) {
+        if (vf.getName().startsWith(excludeDirectory.relativePath())) {
+          return true;
+        }
+      }
+      return false;
+    }
   }
 }

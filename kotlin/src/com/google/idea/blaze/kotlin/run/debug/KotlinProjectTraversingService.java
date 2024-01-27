@@ -38,6 +38,7 @@ import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 /**
  * Traverse the dependency graph searching for kotlinx coroutines library in the transitive
@@ -50,6 +51,16 @@ public final class KotlinProjectTraversingService {
 
   public static KotlinProjectTraversingService getInstance() {
     return ApplicationManager.getApplication().getService(KotlinProjectTraversingService.class);
+  }
+
+  public boolean dependsOnKotlinxCoroutinesLib(BlazeCommandRunConfiguration configuration) {
+    return doFind(
+            configuration,
+            (label, coroutinesLibFinder) ->
+                coroutinesLibFinder.dependsOnKotlinxCoroutines(
+                    configuration.getProject(),
+                    com.google.idea.blaze.common.Label.of(label.toString())))
+        .orElse(false);
   }
 
   /**
@@ -67,9 +78,21 @@ public final class KotlinProjectTraversingService {
       notify("Cannot view coroutines debugging panel: project needs to be synced.");
       return Optional.empty();
     }
+    return doFind(
+            configuration,
+            (label, coroutinesLibFinder) ->
+                findKotlinxCoroutinesTransitiveDep(
+                    coroutinesLibFinder,
+                    TargetKey.forPlainTarget(label),
+                    blazeProjectData.getTargetMap()))
+        .orElse(Optional.empty());
+  }
 
+  private <T> Optional<T> doFind(
+      BlazeCommandRunConfiguration configuration,
+      BiFunction<Label, KotlinxCoroutinesLibFinder, T> fn) {
     Optional<Label> label = getSingleTarget(configuration);
-    if (!label.isPresent()) {
+    if (label.isEmpty()) {
       notify(
           "Cannot view coroutines debugging panel: configuration should have a single target"
               + " label");
@@ -77,17 +100,15 @@ public final class KotlinProjectTraversingService {
     }
 
     Optional<KotlinxCoroutinesLibFinder> coroutinesLibFinder =
-        getApplicableCoroutinesLibFinder(project);
-    if (!coroutinesLibFinder.isPresent()) {
+        getApplicableCoroutinesLibFinder(configuration.getProject());
+
+    if (coroutinesLibFinder.isEmpty()) {
       notify(
           "Cannot view coroutines debugging panel: no applicable KotlinxCoroutinesLibFinder"
               + " EP found.");
       return Optional.empty();
     }
-    return findKotlinxCoroutinesTransitiveDep(
-        coroutinesLibFinder.get(),
-        TargetKey.forPlainTarget(label.get()),
-        blazeProjectData.getTargetMap());
+    return Optional.of(fn.apply(label.get(), coroutinesLibFinder.get()));
   }
 
   /**

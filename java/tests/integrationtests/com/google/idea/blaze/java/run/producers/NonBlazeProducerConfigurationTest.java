@@ -50,8 +50,10 @@ public class NonBlazeProducerConfigurationTest extends BlazeRunConfigurationProd
           "org.jetbrains.kotlin.idea.gradle.testing.native.KotlinMultiplatformNativeTestMethodGradleConfigurationProducer",
           "org.jetbrains.kotlin.idea.gradle.testing.common.KotlinMultiplatformCommonTestClassGradleConfigurationProducer",
           "org.jetbrains.kotlin.idea.gradle.testing.common.KotlinMultiplatformCommonTestMethodGradleConfigurationProducer",
+          "org.jetbrains.kotlin.idea.gradleJava.run.KotlinMultiplatformJvmRunConfigurationProducer",
           "org.jetbrains.kotlin.ide.konan.KotlinNativeRunConfigurationProducer",
-          "com.android.tools.idea.compose.preview.runconfiguration.ComposePreviewRunConfigurationProducer");
+          "com.android.tools.idea.compose.preview.runconfiguration.ComposePreviewRunConfigurationProducer",
+          "com.android.tools.idea.run.configuration.BaselineProfileConfigurationProducer");
 
   @Before
   public final void suppressNativeProducers() {

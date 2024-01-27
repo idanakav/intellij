@@ -41,6 +41,7 @@ import com.google.idea.blaze.base.command.buildresult.BuildResultHelperProvider;
 import com.google.idea.blaze.base.command.info.BlazeInfo;
 import com.google.idea.blaze.base.command.info.BlazeInfoRunner;
 import com.google.idea.blaze.base.console.BlazeConsoleLineProcessorProvider;
+import com.google.idea.blaze.base.model.BlazeVersionData;
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
@@ -86,6 +87,7 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
               BuildSystemName.Blaze,
               AndroidBlazeRules.RuleTypes.ANDROID_ROBOLECTRIC_TEST.getKind(),
               AndroidBlazeRules.RuleTypes.ANDROID_LOCAL_TEST.getKind(),
+              AndroidBlazeRules.RuleTypes.KT_ANDROID_LOCAL_TEST.getKind(),
               JavaBlazeRules.RuleTypes.JAVA_TEST.getKind())
           .build();
 
@@ -267,7 +269,9 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
       Label label,
       FastBuildParameters buildParameters,
       BuildResultHelper resultHelper) {
-    Label deployJarLabel = createDeployJarLabel(label);
+    FastBuildDeployJarStrategy deployJarStrategy =
+        FastBuildDeployJarStrategy.getInstance(Blaze.getBuildSystemName(project));
+    Label deployJarLabel = deployJarStrategy.createDeployJarLabel(label);
     context.output(
         new StatusOutput(
             "Building base deploy jar for fast builds: " + deployJarLabel.targetName()));
@@ -280,15 +284,21 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
 
     BlazeCommand.Builder command =
         BlazeCommand.builder(buildParameters.blazeBinary(), BlazeCommandName.BUILD)
-            .addTargets(label)
-            .addTargets(deployJarLabel)
+            .addTargets(deployJarStrategy.getBuildTargets(label))
+            .addBlazeFlags(deployJarStrategy.getBuildFlags())
             .addBlazeFlags(buildParameters.buildFlags())
             .addBlazeFlags(resultHelper.getBuildFlags());
 
-    aspectStrategy.addAspectAndOutputGroups(command, /* additionalOutputGroups...= */ "default");
+    WorkspaceRoot workspaceRoot = WorkspaceRoot.fromProject(project);
+
+    aspectStrategy.addAspectAndOutputGroups(
+        command,
+        BlazeVersionData.build(
+            Blaze.getBuildSystemProvider(project).getBuildSystem(), workspaceRoot, blazeInfo),
+        /* additionalOutputGroups...= */ "default");
 
     int exitCode =
-        ExternalTask.builder(WorkspaceRoot.fromProject(project))
+        ExternalTask.builder(workspaceRoot)
             .addBlazeCommand(command.build())
             .context(context)
             .stderr(
@@ -303,17 +313,17 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
     if (result.status != Status.SUCCESS) {
       throw new FastBuildTunnelException(new BlazeBuildError("Blaze failure building deploy jar"));
     }
-    Predicate<String> filePredicate =
-        file ->
-            file.endsWith(deployJarLabel.targetName().toString())
-                || aspectStrategy.getAspectOutputFilePredicate().test(file);
+    Predicate<String> jarPredicate = file -> file.endsWith(deployJarLabel.targetName().toString());
     try {
       ImmutableList<File> deployJarArtifacts =
           BlazeArtifact.getLocalFiles(
-              resultHelper.getBuildArtifactsForTarget(deployJarLabel, filePredicate));
+              resultHelper.getBuildArtifactsForTarget(
+                  deployJarStrategy.deployJarOwnerLabel(label), jarPredicate));
       checkState(deployJarArtifacts.size() == 1);
       File deployJar = deployJarArtifacts.get(0);
 
+      Predicate<String> filePredicate =
+          file -> aspectStrategy.getAspectOutputFilePredicate().test(file);
       ImmutableList<File> ideInfoFiles =
           BlazeArtifact.getLocalFiles(
               resultHelper.getArtifactsForOutputGroup(
@@ -336,10 +346,12 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
     ListenableFuture<BlazeInfo> blazeInfoFuture =
         BlazeInfoRunner.getInstance()
             .runBlazeInfo(
+                project,
+                Blaze.getBuildSystemProvider(project)
+                    .getBuildSystem()
+                    .getDefaultInvoker(project, context),
                 context,
                 buildSystemName,
-                buildParameters.blazeBinary(),
-                WorkspaceRoot.fromProject(project),
                 buildParameters.infoFlags());
     BlazeInfo info =
         FutureUtil.waitForFuture(context, blazeInfoFuture)
@@ -354,10 +366,6 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
           String.format("%s info failed", buildSystemName.getLowerCaseName()));
     }
     return info;
-  }
-
-  private Label createDeployJarLabel(Label label) {
-    return Label.create(label + "_deploy.jar");
   }
 
   private FastBuildState performIncrementalCompilation(

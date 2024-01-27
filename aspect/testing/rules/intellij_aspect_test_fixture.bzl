@@ -43,7 +43,7 @@ def _impl(ctx):
         mnemonic = "IntellijAspectTestFixtureBuilder",
         progress_message = "Building Intellij Aspect Test Fixture",
     )
-    return struct(
+    return DefaultInfo(
         files = depset([output]),
         runfiles = ctx.runfiles(
             files = [output],
@@ -57,19 +57,20 @@ _intellij_aspect_test_fixture = rule(
         "output": attr.string(mandatory = True),
         "_intellij_aspect_test_fixture_builder": attr.label(
             default = Label("//aspect/testing/rules:IntellijAspectTestFixtureBuilder"),
-            cfg = "host",
+            cfg = "exec",
             executable = True,
             allow_files = True,
         ),
     },
 )
 
-def intellij_aspect_test_fixture(name, deps):
+def intellij_aspect_test_fixture(name, deps, transitive_configs = []):
     _intellij_aspect_test_fixture(
         name = name,
         output = name + ".intellij-aspect-test-fixture",
         deps = deps,
         testonly = 1,
+        transitive_configs = transitive_configs,
     )
 
 def test_sources(outs):

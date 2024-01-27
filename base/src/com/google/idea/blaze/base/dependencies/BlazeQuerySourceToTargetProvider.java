@@ -16,34 +16,38 @@
 package com.google.idea.blaze.base.dependencies;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
+import com.google.common.io.CharStreams;
 import com.google.common.util.concurrent.Futures;
-import com.google.idea.blaze.base.async.process.ExternalTask;
-import com.google.idea.blaze.base.async.process.LineProcessingOutputStream;
-import com.google.idea.blaze.base.bazel.BuildSystemProvider;
+import com.google.errorprone.annotations.MustBeClosed;
+import com.google.idea.blaze.base.bazel.BuildSystem.BuildInvoker;
 import com.google.idea.blaze.base.command.BlazeCommand;
 import com.google.idea.blaze.base.command.BlazeCommandName;
 import com.google.idea.blaze.base.command.BlazeInvocationContext.ContextType;
+import com.google.idea.blaze.base.command.buildresult.BuildResultHelper;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
-import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
 import com.google.idea.blaze.base.query.BlazeQueryLabelKindParser;
 import com.google.idea.blaze.base.query.BlazeQueryOutputBaseProvider;
 import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.scope.Scope;
-import com.google.idea.blaze.base.scope.output.PrintOutput;
 import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.sync.workspace.WorkspaceHelper;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolver;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolverProvider;
+import com.google.idea.blaze.common.PrintOutput;
+import com.google.idea.blaze.exception.BuildException;
 import com.google.idea.common.experiments.BoolExperiment;
 import com.intellij.openapi.project.Project;
-import java.io.ByteArrayOutputStream;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -65,6 +69,26 @@ public class BlazeQuerySourceToTargetProvider implements SourceToTargetProvider 
   private static final BoolExperiment enabled =
       new BoolExperiment("use.blaze.query.for.background.rdeps", false);
 
+  /**
+   * Blaze source-to-target heuristics for macros. Blaze's same_pkg_direct_rdeps method has a
+   * limitation that prevents it from detecting targets in expanded macros. This fix will use a
+   * modified recursive rdeps query to resolve it. Refer b/206027020#comment24.
+   */
+  private static final BoolExperiment isSourceToTargetHeuristicsForMacrosEnabled =
+      new BoolExperiment("use.blaze.query.source.to.target.heuristics.for.macros", true);
+
+  /** Prefix to identify targets connected to Kotlin macros */
+  public static final String KOTLIN_MACRO_PREFIX = "kt_";
+  /** Suffix to identify Kotlin source files */
+  public static final String KOTLIN_FILE_SUFFIX = ".kt";
+
+  /** Exception thrown while querying targets for a source file */
+  public static class BlazeQuerySourceToTargetException extends Exception {
+    public BlazeQuerySourceToTargetException(String message, Throwable cause) {
+      super(message, cause);
+    }
+  }
+
   @Override
   public Future<List<TargetInfo>> getTargetsBuildingSourceFile(
       Project project, String workspaceRelativePath) {
@@ -80,8 +104,19 @@ public class BlazeQuerySourceToTargetProvider implements SourceToTargetProvider 
             Scope.root(
                 context -> {
                   context.push(new IdeaLogScope());
-                  return runDirectRdepsQuery(
-                      project, ImmutableList.of(label), context, ContextType.Other);
+                  try {
+                    ImmutableList<TargetInfo> targetInfos =
+                        runDirectRdepsQuery(
+                            project, ImmutableList.of(label), context, ContextType.Other);
+                    if (shouldRunRecursiveRdepsQuery(
+                        ImmutableList.of(label), ContextType.Other, targetInfos)) {
+                      return runRecursiveRdepsQuery(
+                          project, ImmutableList.of(label), context, ContextType.Other);
+                    }
+                    return targetInfos;
+                  } catch (BlazeQuerySourceToTargetException ex) {
+                    return null;
+                  }
                 }));
   }
 
@@ -94,57 +129,135 @@ public class BlazeQuerySourceToTargetProvider implements SourceToTargetProvider 
             .map(s -> getSourceLabel(project, s.relativePath()))
             .filter(Objects::nonNull)
             .collect(toImmutableList());
-    return runDirectRdepsQuery(project, labels, context, type);
+    try {
+      ImmutableList<TargetInfo> targetInfos = runDirectRdepsQuery(project, labels, context, type);
+      if (shouldRunRecursiveRdepsQuery(labels, type, targetInfos)) {
+        return runRecursiveRdepsQuery(project, labels, context, type);
+      }
+      return targetInfos;
+    } catch (BlazeQuerySourceToTargetException ex) {
+      return null;
+    }
+  }
+
+  private static boolean shouldRunRecursiveRdepsQuery(
+      Collection<Label> sources, ContextType type, ImmutableList<TargetInfo> targetInfos) {
+    // This method is used by both full and partial sync to find targets for source file, but this
+    // fix is only required for the partial sync as full sync is able to find targets when syncing
+    // the BUILD file along with the source file. Ref. b/206027020#comment24. So, to ensure that
+    // only partial sync uses this flow, we verify that there is a single source file
+    return isSourceToTargetHeuristicsForMacrosEnabled.getValue()
+        && sources.size() == 1
+        // Ensure that fix is only applied on Kotlin files
+        && sources.stream().anyMatch(s -> s.toString().endsWith(KOTLIN_FILE_SUFFIX))
+        && type == ContextType.Sync
+        // Verify that there are no targets other than Kotlin macros
+        && targetInfos.stream()
+            .map(TargetInfo::getKind)
+            .map(kind -> Objects.toString(kind, /* nullDefault= */ ""))
+            .allMatch(kind -> kind.startsWith(KOTLIN_MACRO_PREFIX));
   }
 
   @Nullable
   private static ImmutableList<TargetInfo> runDirectRdepsQuery(
-      Project project, Collection<Label> sources, BlazeContext context, ContextType type) {
+      Project project, Collection<Label> sources, BlazeContext context, ContextType type)
+      throws BlazeQuerySourceToTargetException {
     if (sources.isEmpty()) {
       return ImmutableList.of();
     }
     // quote labels to handle punctuation in file names
     String expr = "\"" + Joiner.on("\"+\"").join(sources) + "\"";
-    String query = String.format("same_pkg_direct_rdeps(%s)", expr);
+    String directRdepsQuery = String.format("same_pkg_direct_rdeps(%s)", expr);
+    return getTargetInfoList(project, context, type, directRdepsQuery);
+  }
 
+  @Nullable
+  private static ImmutableList<TargetInfo> runRecursiveRdepsQuery(
+      Project project, Collection<Label> sources, BlazeContext context, ContextType type)
+      throws BlazeQuerySourceToTargetException {
+    String expr = "\"" + Joiner.on("\"+\"").join(sources) + "\"";
+    String packageName = getPackageName(project, context, type, expr);
+    String rdepsQuery =
+        String.format("kind(\".*_test\", rdeps(%s:all, %s, 2))", packageName, sources.toArray()[0]);
+    return getTargetInfoList(project, context, type, rdepsQuery);
+  }
+
+  @Nullable
+  private static ImmutableList<TargetInfo> getTargetInfoList(
+      Project project, BlazeContext context, ContextType type, String rdepsQuery)
+      throws BlazeQuerySourceToTargetException {
+    BlazeCommand.Builder command =
+        getBlazeCommandBuilder(
+            project, type, rdepsQuery, ImmutableList.of("--output=label_kind"), context);
+    try (InputStream queryResultStream = runQuery(project, command, context)) {
+      BlazeQueryLabelKindParser blazeQueryLabelKindParser =
+          new BlazeQueryLabelKindParser(t -> true);
+      if (queryResultStream == null) {
+        return null;
+      }
+      new BufferedReader(new InputStreamReader(queryResultStream, UTF_8))
+          .lines()
+          .forEach(blazeQueryLabelKindParser::processLine);
+      return blazeQueryLabelKindParser.getTargets();
+    } catch (IOException e) {
+      throw new BlazeQuerySourceToTargetException("Failed to get target info list", e);
+    }
+  }
+
+  @Nullable
+  private static String getPackageName(
+      Project project, BlazeContext context, ContextType type, String expr)
+      throws BlazeQuerySourceToTargetException {
+    BlazeCommand.Builder commandBuilder =
+        getBlazeCommandBuilder(project, type, expr, ImmutableList.of("--output=package"), context);
+
+    try (InputStream queryResultStream = runQuery(project, commandBuilder, context)) {
+      return queryResultStream == null
+          ? null
+          : CharStreams.toString(new InputStreamReader(queryResultStream, UTF_8)).trim();
+    } catch (IOException e) {
+      context.output(
+          PrintOutput.log(
+              String.format("Failed to execute blaze query: %s", e.getCause().getMessage())));
+      throw new BlazeQuerySourceToTargetException(e.getCause().getMessage(), e);
+    }
+  }
+
+  @Nullable
+  @MustBeClosed
+  private static InputStream runQuery(
+      Project project, BlazeCommand.Builder blazeCommand, BlazeContext context)
+      throws BlazeQuerySourceToTargetException {
+    BuildInvoker invoker =
+        Blaze.getBuildSystemProvider(project).getBuildSystem().getDefaultInvoker(project, context);
+    try (BuildResultHelper buildResultHelper = invoker.createBuildResultHelper()) {
+      return invoker.getCommandRunner().runQuery(project, blazeCommand, buildResultHelper, context);
+    } catch (BuildException e) {
+      context.output(
+          PrintOutput.log(String.format("Failed to execute blaze query: %s", e.getMessage())));
+      throw new BlazeQuerySourceToTargetException(e.getMessage(), e);
+    }
+  }
+
+  private static BlazeCommand.Builder getBlazeCommandBuilder(
+      Project project,
+      ContextType type,
+      String query,
+      List<String> additionalBlazeFlags,
+      BlazeContext context) {
     // never use a custom output base for queries during sync
     String outputBaseFlag =
         type == ContextType.Sync
             ? null
             : BlazeQueryOutputBaseProvider.getInstance(project).getOutputBaseFlag();
-
-    BlazeCommand command =
-        BlazeCommand.builder(getBinaryPath(project), BlazeCommandName.QUERY)
-            .addBlazeFlags("--output=label_kind")
-            .addBlazeFlags("--keep_going")
-            .addBlazeFlags(query)
-            .addBlazeStartupFlags(
-                outputBaseFlag == null ? ImmutableList.of() : ImmutableList.of(outputBaseFlag))
-            .build();
-
-    BlazeQueryLabelKindParser outputProcessor = new BlazeQueryLabelKindParser(t -> true);
-    ByteArrayOutputStream stderr = new ByteArrayOutputStream();
-    int retVal =
-        ExternalTask.builder(WorkspaceRoot.fromProject(project))
-            .addBlazeCommand(command)
-            .context(context)
-            .stdout(LineProcessingOutputStream.of(outputProcessor))
-            .stderr(stderr)
-            .build()
-            .run();
-    // exit code of 3 represents a potentially expected, non-fatal error
-    // only display error output for non-3 exit code, when there's an unexpected error
-    if (retVal != 0 && retVal != 3) {
-      // the command would have been logged previously, but that would be truncated
-      // logging it again for easier repro from logs without blowing up the log size
-      context.output(PrintOutput.output("Failed to execute: " + command));
-      context.output(PrintOutput.output("Query command returned: " + retVal));
-      Splitter.on('\n')
-          .split(stderr.toString())
-          .forEach(line -> context.output(PrintOutput.output(line)));
-      return null;
-    }
-    return outputProcessor.getTargets();
+    BuildInvoker buildInvoker =
+        Blaze.getBuildSystemProvider(project).getBuildSystem().getDefaultInvoker(project, context);
+    return BlazeCommand.builder(buildInvoker, BlazeCommandName.QUERY)
+        .addBlazeFlags(additionalBlazeFlags)
+        .addBlazeFlags("--keep_going")
+        .addBlazeFlags(query)
+        .addBlazeStartupFlags(
+            outputBaseFlag == null ? ImmutableList.of() : ImmutableList.of(outputBaseFlag));
   }
 
   /**
@@ -160,10 +273,5 @@ public class BlazeQuerySourceToTargetProvider implements SourceToTargetProvider 
     }
     File file = resolver.resolveToFile(workspaceRelativePath);
     return WorkspaceHelper.getBuildLabel(project, file);
-  }
-
-  private static String getBinaryPath(Project project) {
-    BuildSystemProvider buildSystemProvider = Blaze.getBuildSystemProvider(project);
-    return buildSystemProvider.getSyncBinaryPath(project);
   }
 }

@@ -29,7 +29,10 @@ import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolver;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolverImpl;
 import com.google.idea.blaze.base.util.SaveUtil;
 import com.google.idea.blaze.base.util.SerializationUtil;
-import com.google.idea.blaze.base.vcs.BlazeVcsHandler;
+import com.google.idea.blaze.base.vcs.BlazeVcsHandlerProvider;
+import com.google.idea.blaze.base.vcs.BlazeVcsHandlerProvider.BlazeVcsHandler;
+import com.google.idea.blaze.exception.BuildException;
+import com.google.idea.blaze.exception.ConfigurationException;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import java.io.File;
@@ -69,7 +72,7 @@ final class ProjectViewManagerImpl extends ProjectViewManager {
         classLoaders.add(Thread.currentThread().getContextClassLoader());
         loadedProjectViewSet = (ProjectViewSet) SerializationUtil.loadFromDisk(file, classLoaders);
       } catch (IOException e) {
-        logger.info(e);
+        logger.warn("Failed to load project view set: " + e.getMessage());
       }
       this.projectViewSet = loadedProjectViewSet;
       this.projectViewSetLoaded = true;
@@ -82,33 +85,36 @@ final class ProjectViewManagerImpl extends ProjectViewManager {
   public ProjectViewSet reloadProjectView(BlazeContext context) {
     SaveUtil.saveAllFiles();
     WorkspacePathResolver pathResolver = computeWorkspacePathResolver(project, context);
-    return pathResolver != null ? reloadProjectView(context, pathResolver) : null;
+    try {
+      return pathResolver != null ? reloadProjectView(context, pathResolver) : null;
+    } catch (BuildException e) {
+      context.handleException("Failed to reload project view", e);
+      return null;
+    }
   }
 
-  @Nullable
   @Override
   public ProjectViewSet reloadProjectView(
-      BlazeContext context, WorkspacePathResolver workspacePathResolver) {
+      BlazeContext context, WorkspacePathResolver workspacePathResolver) throws BuildException {
     BlazeImportSettings importSettings =
         BlazeImportSettingsManager.getInstance(project).getImportSettings();
-    assert importSettings != null;
-    assert importSettings.getProjectViewFile() != null;
     File projectViewFile = new File(importSettings.getProjectViewFile());
     ProjectViewParser parser = new ProjectViewParser(context, workspacePathResolver);
     parser.parseProjectView(projectViewFile);
 
-    boolean success = !context.hasErrors();
-    if (success) {
-      ProjectViewSet projectViewSet = parser.getResult();
-      File file = getCacheFile(project, importSettings);
-      try {
-        SerializationUtil.saveToDisk(file, projectViewSet);
-      } catch (IOException e) {
-        logger.error(e);
-      }
-      this.projectViewSet = projectViewSet;
+    if (context.hasErrors()) {
+      throw new ConfigurationException(
+          "Failed to read project view from " + projectViewFile.getAbsolutePath());
     }
-    return success ? projectViewSet : null;
+    ProjectViewSet projectViewSet = parser.getResult();
+    File file = getCacheFile(project, importSettings);
+    try {
+      SerializationUtil.saveToDisk(file, projectViewSet);
+    } catch (IOException e) {
+      logger.error(e);
+    }
+    this.projectViewSet = projectViewSet;
+    return projectViewSet;
   }
 
   private static File getCacheFile(Project project, BlazeImportSettings importSettings) {
@@ -125,12 +131,9 @@ final class ProjectViewManagerImpl extends ProjectViewManager {
     }
     // otherwise try to compute the workspace path resolver from scratch
     WorkspaceRoot workspaceRoot = WorkspaceRoot.fromProject(project);
-    BlazeVcsHandler vcsHandler = BlazeVcsHandler.vcsHandlerForProject(project);
-    if (vcsHandler == null) {
-      return null;
-    }
-    BlazeVcsHandler.BlazeVcsSyncHandler vcsSyncHandler =
-        vcsHandler.createSyncHandler(project, workspaceRoot);
+    BlazeVcsHandler vcsHandler = BlazeVcsHandlerProvider.vcsHandlerForProject(project);
+    BlazeVcsHandlerProvider.BlazeVcsSyncHandler vcsSyncHandler =
+        vcsHandler != null ? vcsHandler.createSyncHandler() : null;
     if (vcsSyncHandler == null) {
       return new WorkspacePathResolverImpl(workspaceRoot);
     }

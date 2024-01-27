@@ -21,6 +21,8 @@ import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.logging.EventLoggingService;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.run.BlazeCommandRunConfiguration;
+import com.google.idea.blaze.base.settings.Blaze;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.intellij.execution.configurations.RunProfile;
 import com.intellij.notification.Notification;
@@ -116,6 +118,12 @@ public final class FastBuildSuggestion
     BlazeCommandRunConfiguration blazeCfg = (BlazeCommandRunConfiguration) runProfile;
 
     if (!(blazeCfg.getSingleTarget() instanceof Label)) {
+      return false;
+    }
+
+    Project project = blazeCfg.getProject();
+    if (Blaze.getProjectType(project).equals(ProjectType.QUERY_SYNC)) {
+      // Fast Build is not supported with query sync
       return false;
     }
     Label label = (Label) blazeCfg.getSingleTarget();

@@ -25,6 +25,8 @@ import com.google.idea.blaze.base.ideinfo.TargetKey;
 import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.primitives.Label;
+import com.google.idea.blaze.base.settings.Blaze;
+import com.google.idea.blaze.base.settings.BlazeImportSettings;
 import com.google.idea.blaze.base.sync.SyncCache;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VfsUtil;
@@ -36,10 +38,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import javax.annotation.Nullable;
 
-class BlazeGoPackageFactory implements GoPackageFactory {
+/** Updates and exposes a map of import paths to files. */
+public class BlazeGoPackageFactory implements GoPackageFactory {
   @Nullable
   @Override
   public GoPackage createPackage(GoFile goFile) {
+    if (Blaze.getProjectType(goFile.getProject()) == BlazeImportSettings.ProjectType.UNKNOWN) {
+      return null;
+    }
     VirtualFile virtualFile = goFile.getVirtualFile();
     if (virtualFile == null) {
       return null;
@@ -54,7 +60,7 @@ class BlazeGoPackageFactory implements GoPackageFactory {
   }
 
   @Nullable
-  static ConcurrentMap<File, String> getFileToImportPathMap(Project project) {
+  public static ConcurrentMap<File, String> getFileToImportPathMap(Project project) {
     return SyncCache.getInstance(project)
         .get(BlazeGoPackageFactory.class, BlazeGoPackageFactory::buildFileToImportPathMap);
   }

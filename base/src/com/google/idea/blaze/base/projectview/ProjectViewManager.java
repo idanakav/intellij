@@ -17,7 +17,7 @@ package com.google.idea.blaze.base.projectview;
 
 import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolver;
-import com.intellij.openapi.components.ServiceManager;
+import com.google.idea.blaze.exception.BuildException;
 import com.intellij.openapi.project.Project;
 import javax.annotation.Nullable;
 
@@ -25,7 +25,7 @@ import javax.annotation.Nullable;
 public abstract class ProjectViewManager {
 
   public static ProjectViewManager getInstance(Project project) {
-    return ServiceManager.getService(project, ProjectViewManager.class);
+    return project.getService(ProjectViewManager.class);
   }
 
   /** Returns the current project view collection. If there is an error, returns null. */
@@ -39,12 +39,7 @@ public abstract class ProjectViewManager {
   @Nullable
   public abstract ProjectViewSet reloadProjectView(BlazeContext context);
 
-  /**
-   * Reloads the project view, replacing the current one only if there are no errors.
-   */
-  @Nullable
+  /** Reloads the project view, replacing the current one only if there are no errors. */
   public abstract ProjectViewSet reloadProjectView(
-      BlazeContext context, WorkspacePathResolver workspacePathResolver);
-
-
+      BlazeContext context, WorkspacePathResolver workspacePathResolver) throws BuildException;
 }

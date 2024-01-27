@@ -27,6 +27,8 @@ import com.google.idea.blaze.base.run.BlazeCommandRunConfiguration;
 import com.google.idea.blaze.base.run.BlazeCommandRunConfigurationType;
 import com.google.idea.blaze.base.run.BlazeRunConfigurationFactory;
 import com.google.idea.blaze.base.run.state.BlazeCommandRunConfigurationCommonState;
+import com.google.idea.blaze.base.settings.Blaze;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.intellij.execution.actions.ConfigurationContext;
 import com.intellij.openapi.project.Project;
@@ -72,9 +74,11 @@ public class BlazeBuildFileRunConfigurationProducer
       BlazeCommandRunConfiguration configuration,
       ConfigurationContext context,
       Ref<PsiElement> sourceElement) {
+    Project project = configuration.getProject();
     BlazeProjectData blazeProjectData =
-        BlazeProjectDataManager.getInstance(configuration.getProject()).getBlazeProjectData();
-    if (blazeProjectData == null) {
+        BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
+    // With query sync we don't need a sync to run a configuration
+    if (blazeProjectData == null && Blaze.getProjectType(project) != ProjectType.QUERY_SYNC) {
       return false;
     }
     BuildTarget target = getBuildTarget(context);

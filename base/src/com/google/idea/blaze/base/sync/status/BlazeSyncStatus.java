@@ -17,7 +17,6 @@ package com.google.idea.blaze.base.sync.status;
 
 import com.google.idea.blaze.base.sync.SyncMode;
 import com.google.idea.blaze.base.sync.SyncResult;
-import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 
 /** Interface to tell blaze it might need to resync. */
@@ -32,15 +31,19 @@ public interface BlazeSyncStatus {
 
   SyncStatus getStatus();
 
-
   static BlazeSyncStatus getInstance(Project project) {
-    return ServiceManager.getService(project, BlazeSyncStatus.class);
+    return project.getService(BlazeSyncStatus.class);
   }
 
   void syncStarted();
 
   void syncEnded(SyncMode syncMode, SyncResult syncResult);
 
+  /**
+   * @deprecated For query sync, use {@link
+   *     com.google.idea.blaze.base.qsync.QuerySyncManager#syncInProgress}
+   */
+  @Deprecated
   boolean syncInProgress();
 
   void setDirty();

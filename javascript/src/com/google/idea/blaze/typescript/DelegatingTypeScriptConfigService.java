@@ -20,7 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.common.experiments.BoolExperiment;
-import com.google.idea.sdkcompat.typescript.TypeScriptSDKCompat;
+import com.google.idea.sdkcompat.javascript.TypeScriptConfigServiceAdapter;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfig;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigService;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigServiceImpl;
@@ -38,8 +38,13 @@ import javax.annotation.Nullable;
  * Switches between {@link BlazeTypeScriptConfigServiceImpl} if the project is an applicable blaze
  * project, or {@link TypeScriptConfigServiceImpl} if it isn't.
  */
-class DelegatingTypeScriptConfigService implements TypeScriptConfigService {
+class DelegatingTypeScriptConfigService extends TypeScriptConfigServiceAdapter {
   private final TypeScriptConfigService impl;
+
+  @Override
+  public TypeScriptConfigService getImpl() {
+    return impl;
+  }
 
   private static final BoolExperiment useBlazeTypeScriptConfig =
       new BoolExperiment("use.blaze.typescript.config", true);
@@ -50,11 +55,6 @@ class DelegatingTypeScriptConfigService implements TypeScriptConfigService {
     } else {
       this.impl = new TypeScriptConfigServiceImpl(project);
     }
-  }
-
-  @Override
-  public List<VirtualFile> getConfigFiles() {
-    return impl.getConfigFiles();
   }
 
   void update(ImmutableMap<Label, File> tsconfigs) {
@@ -84,21 +84,21 @@ class DelegatingTypeScriptConfigService implements TypeScriptConfigService {
     return impl.getPreferableConfig(scopeFile);
   }
 
-  /** #api203: Added in 2021.1, therefore @Override is ommitted. */
   @Nullable
+  @Override
   public TypeScriptConfig getPreferableOrParentConfig(@Nullable VirtualFile virtualFile) {
-    return TypeScriptSDKCompat.getPreferableOrParentConfig(impl, virtualFile);
+    return impl.getPreferableOrParentConfig(virtualFile);
   }
 
-  /** #api203: Added in 2021.1, therefore @Override is ommitted. */
   @Nullable
+  @Override
   public TypeScriptConfig getDirectIncludePreferableConfig(@Nullable VirtualFile virtualFile) {
-    return TypeScriptSDKCompat.getDirectIncludePreferableConfig(impl, virtualFile);
+    return impl.getDirectIncludePreferableConfig(virtualFile);
   }
 
-  /** #api203: Added in 2021.1, therefore @Override is ommitted. */
+  @Override
   public List<VirtualFile> getRootConfigFiles() {
-    return TypeScriptSDKCompat.getRootConfigFiles(impl);
+    return impl.getRootConfigFiles();
   }
 
   @Nullable
@@ -107,31 +107,11 @@ class DelegatingTypeScriptConfigService implements TypeScriptConfigService {
     return impl.parseConfigFile(file);
   }
 
-  /** Removed in 2021.1. #api203 https://github.com/bazelbuild/intellij/issues/2329 */
-  public List<TypeScriptConfig> getConfigs() {
-    return TypeScriptSDKCompat.getConfigs(impl);
-  }
-
   public List<TypeScriptConfig> getTypeScriptConfigs() {
     if (impl instanceof BlazeTypeScriptConfigServiceImpl) {
       return ((BlazeTypeScriptConfigServiceImpl) impl).getTypeScriptConfigs();
     }
     return ImmutableList.of();
-  }
-
-  @Override
-  public void addChangeListener(TypeScriptConfigsChangedListener listener) {
-    impl.addChangeListener(listener);
-  }
-
-  /** #api203: Removed in 2021.1, therefore @Override is ommitted. */
-  public boolean hasConfigs() {
-    return TypeScriptSDKCompat.hasConfigs(impl);
-  }
-
-  @Override
-  public ModificationTracker getConfigTracker(@Nullable VirtualFile file) {
-    return impl.getConfigTracker(file);
   }
 
   @Override

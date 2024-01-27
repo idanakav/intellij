@@ -22,10 +22,11 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.StartupActivity;
 
 /** Suppresses certain non-Blaze configuration producers in Blaze projects. */
-public class NonBlazeProducerSuppressor implements StartupActivity {
+public class NonBlazeProducerSuppressor implements StartupActivity.DumbAware {
 
   private static final ImmutableList<String> KOTLIN_PRODUCERS =
       ImmutableList.of(
+          "org.jetbrains.kotlin.idea.gradleCodeInsightCommon.native.KotlinNativeRunConfigurationProducer",
           "org.jetbrains.kotlin.idea.gradleJava.run.KotlinJvmTestClassGradleConfigurationProducer",
           "org.jetbrains.kotlin.idea.gradleJava.run.KotlinJvmTestMethodGradleConfigurationProducer",
           "org.jetbrains.kotlin.idea.gradleJava.run.KotlinMultiplatformJvmTestClassGradleConfigurationProducer",
@@ -85,9 +86,7 @@ public class NonBlazeProducerSuppressor implements StartupActivity {
           "com.intellij.execution.junit.PatternConfigurationProducer",
           "com.intellij.execution.junit.UniqueIdConfigurationProducer",
           "com.intellij.execution.junit.testDiscovery.JUnitTestDiscoveryConfigurationProducer",
-          "com.intellij.execution.application.ApplicationConfigurationProducer",
-          // #api211 TestMethodConfigurationProducer is removed in 2021.2
-          "com.intellij.execution.junit.TestMethodConfigurationProducer");
+          "com.intellij.execution.application.ApplicationConfigurationProducer");
 
   @Override
   public void runActivity(Project project) {

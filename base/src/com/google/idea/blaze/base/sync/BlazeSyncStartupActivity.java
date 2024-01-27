@@ -15,15 +15,19 @@
  */
 package com.google.idea.blaze.base.sync;
 
+import com.google.idea.blaze.base.logging.utils.querysync.QuerySyncActionStatsScope;
+import com.google.idea.blaze.base.qsync.QuerySyncManager;
+import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.blaze.base.settings.BlazeUserSettings;
-import com.google.idea.blaze.base.sync.data.BlazeProjectDataManagerImpl;
+import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.StartupActivity;
 
 /** Syncs the project upon startup. */
-public class BlazeSyncStartupActivity implements StartupActivity {
+public class BlazeSyncStartupActivity implements StartupActivity.DumbAware {
 
   public static final String SYNC_REASON = "BlazeSyncStartupActivity";
 
@@ -34,6 +38,12 @@ public class BlazeSyncStartupActivity implements StartupActivity {
     if (importSettings == null) {
       return;
     }
+    if (Blaze.getProjectType(project) == ProjectType.QUERY_SYNC) {
+      // When query sync is not enabled hasProjectData triggers the load
+      QuerySyncManager.getInstance(project)
+          .onStartup(QuerySyncActionStatsScope.create(getClass(), null));
+      return;
+    }
     if (hasProjectData(project, importSettings)) {
       BlazeSyncManager.getInstance(project).requestProjectSync(startupSyncParams());
     } else {
@@ -42,7 +52,7 @@ public class BlazeSyncStartupActivity implements StartupActivity {
   }
 
   private static boolean hasProjectData(Project project, BlazeImportSettings importSettings) {
-    return BlazeProjectDataManagerImpl.getImpl(project).loadProjectRoot(importSettings) != null;
+    return BlazeProjectDataManager.getInstance(project).loadProject(importSettings) != null;
   }
 
   private static BlazeSyncParams startupSyncParams() {

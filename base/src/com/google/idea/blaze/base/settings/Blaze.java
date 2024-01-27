@@ -16,6 +16,10 @@
 package com.google.idea.blaze.base.settings;
 
 import com.google.idea.blaze.base.bazel.BuildSystemProvider;
+import com.google.idea.blaze.base.model.BlazeProjectData;
+import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
+import com.google.idea.blaze.base.qsync.QuerySync;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.intellij.ide.DataManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
@@ -27,19 +31,45 @@ public class Blaze {
 
   private Blaze() {}
 
-  public static boolean isBlazeProjectOpen() {
-    for (Project project : ProjectManager.getInstance().getOpenProjects()) {
-      if (isBlazeProject(project)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /** Returns whether this project was imported from blaze. */
+  /**
+   * Returns whether this project was imported from blaze.
+   *
+   * @deprecated use {@link #getProjectType(Project)}.
+   */
+  @Deprecated
   public static boolean isBlazeProject(@Nullable Project project) {
     return project != null
         && BlazeImportSettingsManager.getInstance(project).getImportSettings() != null;
+  }
+
+  public static BlazeProjectData getProjectData(@Nullable Project project) {
+    if (!isBlazeProject(project)) {
+      return null;
+    }
+
+    return BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
+  }
+
+  /**
+   * Returns the ProjectType of this imported project. {@code ProjectType.UNKNOWN} will be returned
+   * if the project is not available, not imported from blaze, or we failed to access its import
+   * settings.
+   */
+  public static ProjectType getProjectType(@Nullable Project project) {
+    if (project == null) {
+      return ProjectType.UNKNOWN;
+    }
+
+    BlazeImportSettingsManager blazeImportSettingsManager =
+        BlazeImportSettingsManager.getInstance(project);
+    if (blazeImportSettingsManager == null) {
+      return ProjectType.UNKNOWN;
+    }
+    BlazeImportSettings blazeImportSettings = blazeImportSettingsManager.getImportSettings();
+    if (blazeImportSettings == null) {
+      return ProjectType.UNKNOWN;
+    }
+    return blazeImportSettings.getProjectType();
   }
 
   /**

@@ -15,6 +15,7 @@
  */
 package com.google.idea.blaze.android.sync;
 
+
 import com.android.tools.idea.model.AndroidModel;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -251,6 +252,10 @@ public class BlazeAndroidSyncPlugin implements BlazeSyncPlugin {
   public boolean validate(
       Project project, BlazeContext context, BlazeProjectData blazeProjectData) {
     if (!isAndroidWorkspace(blazeProjectData.getWorkspaceLanguageSettings())) {
+      return true;
+    }
+
+    if (blazeProjectData.getSyncState().get(BlazeAndroidSyncData.class) == null) {
       return true;
     }
 

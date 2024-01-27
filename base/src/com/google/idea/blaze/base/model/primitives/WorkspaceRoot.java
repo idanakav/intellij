@@ -22,6 +22,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import java.io.File;
+import java.nio.file.Path;
 import javax.annotation.Nullable;
 
 /** Represents a workspace root */
@@ -45,12 +46,17 @@ public class WorkspaceRoot implements ProtoWrapper<String> {
   /**
    * Tries to load the import settings for the given project and get the workspace root directory.
    * <br>
-   * Unlike {@link #fromProject}, it will silently return null if this is not a blaze project.
+   * Unlike {@link #fromProject}, it will silently return null if this is not a blaze project of if
+   * the project is not properly initialized (eg. in tests).
    */
   @Nullable
   public static WorkspaceRoot fromProjectSafe(Project project) {
-    BlazeImportSettings importSettings =
-        BlazeImportSettingsManager.getInstance(project).getImportSettings();
+    BlazeImportSettingsManager manager = BlazeImportSettingsManager.getInstance(project);
+    if (manager == null) {
+      return null;
+    }
+
+    BlazeImportSettings importSettings = manager.getImportSettings();
     return importSettings != null ? fromImportSettings(importSettings) : null;
   }
 
@@ -74,12 +80,24 @@ public class WorkspaceRoot implements ProtoWrapper<String> {
     return directory;
   }
 
+  public Path absolutePathFor(String workspaceRelativePath) {
+    return path().resolve(workspaceRelativePath);
+  }
+
+  public Path path() {
+    return directory.toPath();
+  }
+
   public WorkspacePath workspacePathFor(File file) {
     return workspacePathFor(file.getPath());
   }
 
   public WorkspacePath workspacePathFor(VirtualFile file) {
     return workspacePathFor(file.getPath());
+  }
+
+  public Path relativize(VirtualFile file) {
+    return workspacePathFor(file).asPath();
   }
 
   private WorkspacePath workspacePathFor(String path) {

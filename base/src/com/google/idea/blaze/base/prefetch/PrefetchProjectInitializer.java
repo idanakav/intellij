@@ -24,45 +24,33 @@ import com.google.idea.blaze.base.projectview.ProjectViewSet;
 import com.google.idea.blaze.base.scope.Scope;
 import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
-import com.google.idea.blaze.base.sync.data.BlazeProjectDataManagerImpl;
+import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.common.experiments.BoolExperiment;
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.components.ApplicationComponent;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
-import com.intellij.openapi.project.ProjectManagerListener;
+import com.intellij.openapi.startup.StartupActivity;
 import javax.annotation.Nullable;
 import org.jetbrains.ide.PooledThreadExecutor;
 
 /** Run prefetching on project open, prior to initial indexing step. */
-public class PrefetchProjectInitializer implements ApplicationComponent {
-
+public class PrefetchProjectInitializer implements StartupActivity.DumbAware {
   private static final Logger logger = Logger.getInstance(PrefetchProjectInitializer.class);
 
   private static final BoolExperiment prefetchOnProjectOpen =
       new BoolExperiment("prefetch.on.project.open2", true);
 
   @Override
-  public void initComponent() {
-    ApplicationManager.getApplication()
-        .getMessageBus()
-        .connect()
-        .subscribe(
-            ProjectManager.TOPIC,
-            new ProjectManagerListener() {
-              @Override
-              public void projectOpened(Project project) {
-                if (prefetchOnProjectOpen.getValue()) {
-                  prefetchProjectFiles(project);
-                }
-              }
-            });
+  public void runActivity(Project project) {
+    if (prefetchOnProjectOpen.getValue()) {
+      prefetchProjectFiles(project);
+    }
   }
 
   private static void prefetchProjectFiles(Project project) {
-    if (!Blaze.isBlazeProject(project)) {
+    if (Blaze.getProjectType(project) != ProjectType.ASPECT_SYNC) {
+      // TODO(querysync)
       return;
     }
     PrefetchIndexingTask.submitPrefetchingTask(
@@ -98,7 +86,7 @@ public class PrefetchProjectInitializer implements ApplicationComponent {
       return null;
     }
     BlazeProjectData blazeProjectData =
-        BlazeProjectDataManagerImpl.getImpl(project).loadProjectRoot(importSettings);
+        BlazeProjectDataManager.getInstance(project).loadProject(importSettings);
     if (blazeProjectData == null) {
       logger.info("Couldn't load project data for prefetcher");
     }

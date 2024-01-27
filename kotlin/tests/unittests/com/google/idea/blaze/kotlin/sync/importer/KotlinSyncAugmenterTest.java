@@ -44,10 +44,14 @@ import com.google.idea.blaze.java.sync.BlazeJavaSyncPlugin;
 import com.google.idea.blaze.java.sync.model.BlazeJarLibrary;
 import com.google.idea.blaze.kotlin.KotlinBlazeRules;
 import com.google.idea.blaze.kotlin.sync.BlazeKotlinSyncPlugin;
+import com.google.idea.common.experiments.BoolExperiment;
 import com.google.idea.common.experiments.ExperimentService;
 import com.google.idea.common.experiments.MockExperimentService;
 import com.intellij.openapi.extensions.impl.ExtensionPointImpl;
 import java.util.ArrayList;
+
+import kotlin.sequences.Sequence;
+import kotlin.sequences.SequencesKt;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -79,6 +83,10 @@ public class KotlinSyncAugmenterTest extends BlazeTestCase {
 
     MockExperimentService experimentService = new MockExperimentService();
     applicationServices.register(ExperimentService.class, experimentService);
+    experimentService.setExperiment(
+        new BoolExperiment("blaze.sync.kotlin.attach.genjar", true), false);
+    experimentService.setExperiment(
+        new BoolExperiment("blaze.sync.kotlin.attach.classjar", false), true);
 
     augmenters =
         registerExtensionPoint(BlazeJavaSyncAugmenter.EP_NAME, BlazeJavaSyncAugmenter.class);
@@ -118,7 +126,7 @@ public class KotlinSyncAugmenterTest extends BlazeTestCase {
             .build();
     ArrayList<BlazeJarLibrary> genJars = new ArrayList<>();
 
-    for (BlazeJavaSyncAugmenter augmenter : augmenters) {
+    for (BlazeJavaSyncAugmenter augmenter : toIterable(augmenters)) { // #api233 - in 2024.1 ExtensionPointImpl implements Sequenec instead of Iterable
       augmenter.addJarsForSourceTarget(
           workspaceLanguageSettings, projectViewSet, target, new ArrayList<>(), genJars);
     }
@@ -161,7 +169,8 @@ public class KotlinSyncAugmenterTest extends BlazeTestCase {
             .build();
     ArrayList<BlazeJarLibrary> genJars = new ArrayList<>();
 
-    for (BlazeJavaSyncAugmenter augmenter : augmenters) {
+    for (BlazeJavaSyncAugmenter augmenter : toIterable(augmenters)) { // #api233 - in 2024.1 ExtensionPointImpl implements Sequence instead of Iterable
+
       augmenter.addJarsForSourceTarget(
           workspaceLanguageSettings, projectViewSet, target, new ArrayList<>(), genJars);
     }
@@ -178,5 +187,13 @@ public class KotlinSyncAugmenterTest extends BlazeTestCase {
 
   private static ArtifactLocation source(String relativePath) {
     return ArtifactLocation.builder().setRelativePath(relativePath).setIsSource(true).build();
+  }
+
+  private static <T> Iterable<T> toIterable(Iterable<T> iterable) {
+    return iterable;
+  }
+
+  private static <T> Iterable<T> toIterable(Sequence<T> sequence) {
+    return SequencesKt.asIterable(sequence);
   }
 }

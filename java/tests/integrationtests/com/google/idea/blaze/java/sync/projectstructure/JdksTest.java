@@ -15,9 +15,6 @@
  */
 package com.google.idea.blaze.java.sync.projectstructure;
 
-import static com.google.common.truth.Truth.assertThat;
-import static java.util.Arrays.stream;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.idea.blaze.base.BlazeIntegrationTestCase;
 import com.google.idea.blaze.java.sync.sdk.BlazeJdkProvider;
@@ -25,16 +22,21 @@ import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.projectRoots.JavaSdk;
 import com.intellij.openapi.projectRoots.ProjectJdkTable;
 import com.intellij.openapi.projectRoots.Sdk;
-import com.intellij.openapi.projectRoots.impl.MockSdk;
-import com.intellij.openapi.projectRoots.impl.UnknownSdkType;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.testFramework.IdeaTestUtil;
-import com.intellij.util.containers.MultiMap;
-import java.io.File;
-import java.util.Optional;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+
+import java.io.File;
+import java.util.Comparator;
+import java.util.Optional;
+
+import static com.google.common.truth.Truth.assertThat;
+import static com.google.idea.java.JavaSdkCompat.getNonJavaMockSdk;
+import static com.google.idea.java.JavaSdkCompat.getUniqueMockJdk;
+import static java.util.Arrays.stream;
 
 /** Integration tests for {@link Jdks}. */
 @RunWith(JUnit4.class)
@@ -113,6 +115,7 @@ public class JdksTest extends BlazeIntegrationTestCase {
     assertThat(chosenSdk).isEqualTo(jdk8);
   }
 
+  /** #api233 remove test */
   @Test
   public void testChooseDifferentSdkIfCurrentNotJdk() {
     Sdk currentSdk = getNonJavaMockSdk();
@@ -222,6 +225,62 @@ public class JdksTest extends BlazeIntegrationTestCase {
     assertThat(chosenSdk).isNotEqualTo(currentJdk7);
   }
 
+  static class LanguageLevelWithPreview {
+    LanguageLevelWithPreview(LanguageLevel stableLevel, LanguageLevel previewLevel){
+      this.stableLevel = stableLevel;
+      this.previewLevel = previewLevel;
+    }
+    private final LanguageLevel stableLevel;
+    private final LanguageLevel previewLevel;
+  }
+
+  @NotNull
+  private static LanguageLevelWithPreview getLatestLevelWithPreview() {
+    return stream(LanguageLevel.values())
+            .filter(it -> it.getPreviewLevel() != null && !it.getPreviewLevel().name().endsWith("_X"))
+            .map(it -> new LanguageLevelWithPreview(it, it.getPreviewLevel()))
+            .max(Comparator.comparingInt(it -> it.stableLevel.toJavaVersion().feature))
+            .orElseThrow(() -> new RuntimeException("Test can't be run, no preview language levels found in this IntelliJ version"));
+  }
+
+  @Test
+  public void testChooseJdkProvidingRequestedPreviewLanguageLevel() {
+    LanguageLevelWithPreview levelToTest = getLatestLevelWithPreview();
+
+    Sdk jdk11 = getUniqueMockJdk(LanguageLevel.JDK_11);
+    Sdk jdkWithPreview = getUniqueMockJdk(levelToTest.stableLevel);
+
+    registerJdkProvider(
+        ImmutableMap.of(
+            LanguageLevel.JDK_11, jdk11,
+            levelToTest.stableLevel, jdkWithPreview));
+
+    setJdkTable(jdk11, jdkWithPreview);
+
+    Sdk chosenSdk = Jdks.chooseOrCreateJavaSdk(jdk11, levelToTest.previewLevel);
+    assertThat(chosenSdk).isNotEqualTo(jdk11);
+    assertThat(chosenSdk).isEqualTo(jdkWithPreview);
+  }
+
+  @Test
+  public void testChoosesJdkProvidingLevelWhenMultipleLevelsProvided() {
+    LanguageLevelWithPreview levelToTest = getLatestLevelWithPreview();
+    Sdk jdk11 = getUniqueMockJdk(LanguageLevel.JDK_11);
+    Sdk jdkWithPreview = getUniqueMockJdk(levelToTest.stableLevel);
+
+    registerJdkProvider(
+        ImmutableMap.of(
+            LanguageLevel.JDK_11, jdk11,
+            levelToTest.stableLevel, jdkWithPreview,
+            levelToTest.previewLevel, jdkWithPreview
+        ));
+
+    setJdkTable(jdk11, jdkWithPreview);
+
+    Sdk chosenSdk = Jdks.chooseOrCreateJavaSdk(jdk11, levelToTest.previewLevel);
+    assertThat(chosenSdk).isEqualTo(jdkWithPreview);
+  }
+
   private void setJdkTable(Sdk... jdks) {
     WriteAction.run(
         () -> {
@@ -241,19 +300,4 @@ public class JdksTest extends BlazeIntegrationTestCase {
                 .orElse(null));
   }
 
-  private static Sdk getUniqueMockJdk(LanguageLevel languageLevel) {
-    MockSdk jdk = (MockSdk) IdeaTestUtil.getMockJdk(languageLevel.toJavaVersion());
-    jdk.setName(jdk.getName() + "." + jdk.hashCode());
-    jdk.setHomePath(jdk.getHomePath() + "." + jdk.hashCode());
-    return jdk;
-  }
-
-  private static Sdk getNonJavaMockSdk() {
-    return new MockSdk(
-        /* name= */ "",
-        /* homePath= */ "",
-        /* versionString= */ "",
-        /* roots= */ MultiMap.empty(),
-        UnknownSdkType.getInstance(""));
-  }
 }

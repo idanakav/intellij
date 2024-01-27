@@ -16,15 +16,19 @@
 package com.google.idea.blaze.base.bazel;
 
 import com.google.errorprone.annotations.MustBeClosed;
+import com.google.idea.blaze.base.command.BlazeCommandName;
 import com.google.idea.blaze.base.command.CommandLineBlazeCommandRunner;
 import com.google.idea.blaze.base.command.buildresult.BuildResultHelper;
 import com.google.idea.blaze.base.command.buildresult.BuildResultHelperBep;
 import com.google.idea.blaze.base.command.info.BlazeInfo;
 import com.google.idea.blaze.base.model.BlazeVersionData;
+import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
 import com.google.idea.blaze.base.projectview.ProjectViewManager;
 import com.google.idea.blaze.base.projectview.ProjectViewSet;
 import com.google.idea.blaze.base.projectview.section.sections.BazelBinarySection;
+import com.google.idea.blaze.base.qsync.BazelQueryRunner;
+import com.google.idea.blaze.base.run.ExecutorType;
 import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.settings.BlazeUserSettings;
 import com.google.idea.blaze.base.settings.BuildBinaryType;
@@ -62,6 +66,18 @@ class BazelBuildSystem implements BuildSystem {
   }
 
   @Override
+  public BuildInvoker getBuildInvoker(
+      Project project, BlazeContext context, ExecutorType executorType, Kind targetKind) {
+    return getBuildInvoker(project, context);
+  }
+
+  @Override
+  public BuildInvoker getBuildInvoker(
+      Project project, BlazeContext context, BlazeCommandName command) {
+    return getBuildInvoker(project, context);
+  }
+
+  @Override
   public BuildInvoker getBuildInvoker(Project project, BlazeContext context) {
     String binaryPath;
     File projectSpecificBinary = getProjectSpecificBazelBinary(project);
@@ -77,6 +93,11 @@ class BazelBuildSystem implements BuildSystem {
   @Override
   public Optional<BuildInvoker> getParallelBuildInvoker(Project project, BlazeContext context) {
     return Optional.empty();
+  }
+
+  @Override
+  public Optional<BuildInvoker> getLocalBuildInvoker(Project project, BlazeContext context) {
+    return Optional.of(getBuildInvoker(project, context));
   }
 
   @Override
@@ -97,5 +118,10 @@ class BazelBuildSystem implements BuildSystem {
   public void populateBlazeVersionData(
       WorkspaceRoot workspaceRoot, BlazeInfo blazeInfo, BlazeVersionData.Builder builder) {
     builder.setBazelVersion(BazelVersion.parseVersion(blazeInfo));
+  }
+
+  @Override
+  public BazelQueryRunner createQueryRunner(Project project) {
+    return new BazelQueryRunner(project, this);
   }
 }

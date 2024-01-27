@@ -31,7 +31,7 @@ import javax.annotation.Nullable;
 /** Project data relating to targets and their generated outputs. */
 public final class ProjectTargetData implements ProtoWrapper<ProjectData.TargetData> {
 
-  public final TargetMap targetMap;
+  private final TargetMap targetMap;
   @Nullable public final BlazeIdeInterfaceState ideInterfaceState;
   public final RemoteOutputArtifacts remoteOutputs;
 
@@ -42,6 +42,10 @@ public final class ProjectTargetData implements ProtoWrapper<ProjectData.TargetD
     this.targetMap = targetMap;
     this.ideInterfaceState = ideInterfaceState;
     this.remoteOutputs = remoteOutputs;
+  }
+
+  public TargetMap targetMap() {
+    return targetMap;
   }
 
   public static ProjectTargetData fromProto(ProjectData.TargetData proto) {

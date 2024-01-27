@@ -24,6 +24,7 @@ import com.google.idea.blaze.base.filecache.FileCaches;
 import com.google.idea.blaze.base.filecache.RemoteOutputsCache;
 import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.io.VirtualFileSystemProvider;
+import com.google.idea.blaze.base.model.AspectSyncProjectData;
 import com.google.idea.blaze.base.model.BlazeLibrary;
 import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.BlazeVersionData;
@@ -41,7 +42,9 @@ import com.google.idea.blaze.base.scope.output.StatusOutput;
 import com.google.idea.blaze.base.scope.scopes.NetworkTrafficTrackingScope.NetworkTrafficUsedOutput;
 import com.google.idea.blaze.base.scope.scopes.TimingScope;
 import com.google.idea.blaze.base.scope.scopes.TimingScope.EventType;
+import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.blaze.base.sync.BlazeSyncPlugin.ModuleEditor;
 import com.google.idea.blaze.base.sync.SyncScope.SyncCanceledException;
@@ -49,7 +52,6 @@ import com.google.idea.blaze.base.sync.SyncScope.SyncFailedException;
 import com.google.idea.blaze.base.sync.aspects.BlazeIdeInterface;
 import com.google.idea.blaze.base.sync.data.BlazeDataStorage;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
-import com.google.idea.blaze.base.sync.data.BlazeProjectDataManagerImpl;
 import com.google.idea.blaze.base.sync.libraries.BlazeLibraryCollector;
 import com.google.idea.blaze.base.sync.libraries.LibraryEditor;
 import com.google.idea.blaze.base.sync.projectstructure.ContentEntryEditor;
@@ -150,14 +152,24 @@ final class ProjectUpdateSyncTask {
     this.oldProjectData = getOldProjectData(project, syncMode);
   }
 
-  private static BlazeProjectData getOldProjectData(Project project, SyncMode syncMode) {
-    return syncMode == SyncMode.FULL
-        ? null
-        : BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
+  @Nullable
+  private static AspectSyncProjectData getOldProjectData(Project project, SyncMode syncMode) {
+    if (syncMode == SyncMode.FULL) {
+      return null;
+    }
+    Preconditions.checkState(
+        Blaze.getProjectType(project) == ProjectType.ASPECT_SYNC,
+        "This should only happen in legacy sync");
+    BlazeProjectData data = BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
+    if (data == null) {
+      return null;
+    }
+    Preconditions.checkState(data instanceof AspectSyncProjectData, "Invalid project data type");
+    return (AspectSyncProjectData) data;
   }
 
   private void run(BlazeContext context) throws SyncCanceledException, SyncFailedException {
-    TargetMap targetMap = targetData.targetMap;
+    TargetMap targetMap = targetData.targetMap();
     RemoteOutputArtifacts oldRemoteState = RemoteOutputArtifacts.fromProjectData(oldProjectData);
     RemoteOutputArtifacts newRemoteState = targetData.remoteOutputs;
 
@@ -208,7 +220,7 @@ final class ProjectUpdateSyncTask {
     }
 
     BlazeProjectData newProjectData =
-        new BlazeProjectData(
+        new AspectSyncProjectData(
             targetData,
             blazeInfo,
             projectState.getBlazeVersionData(),
@@ -337,7 +349,7 @@ final class ProjectUpdateSyncTask {
             return false;
           }
 
-          BlazeProjectDataManagerImpl.getImpl(project)
+          BlazeProjectDataManager.getInstance(project)
               .saveProject(importSettings, newBlazeProjectData);
           return true;
         });
@@ -389,7 +401,7 @@ final class ProjectUpdateSyncTask {
         BlazeLibraryCollector.getLibraries(projectViewSet, newBlazeProjectData);
     LibraryEditor.updateProjectLibraries(
         project, context, projectViewSet, newBlazeProjectData, libraries);
-    LibraryEditor.configureDependencies(workspaceModifiableModel, libraries);
+    LibraryEditor.configureDependencies(project, workspaceModifiableModel, libraries);
 
     for (BlazeSyncPlugin blazeSyncPlugin : BlazeSyncPlugin.EP_NAME.getExtensions()) {
       blazeSyncPlugin.updateProjectStructure(

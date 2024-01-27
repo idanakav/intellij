@@ -1,16 +1,16 @@
-load("//build_defs:build_defs.bzl", "intellij_plugin_library")
-load(
-    "//testing:test_defs.bzl",
-    "intellij_unit_test_suite",
-)
 load(
     "//:build-visibility.bzl",
     "COMMON_PLUGINS_VISIBILITY",
     "G3PLUGINS_VISIBILITY",
     "SERVICES_EXPERIMENT_SUBPACKAGES",
 )
+load("//build_defs:build_defs.bzl", "intellij_plugin_library")
+load(
+    "//testing:test_defs.bzl",
+    "intellij_unit_test_suite",
+)
 
-licenses(["notice"])  # Apache 2.0
+licenses(["notice"])
 
 java_library(
     name = "experiments",
@@ -18,8 +18,10 @@ java_library(
     resources = [":experiment_properties"],
     visibility = COMMON_PLUGINS_VISIBILITY,
     deps = [
+        "//common/util:platform",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
+        "//third_party/auto_value",
     ],
 )
 
@@ -62,6 +64,7 @@ intellij_unit_test_suite(
         "//intellij_platform_sdk:plugin_api_for_tests",
         "//intellij_platform_sdk:test_libs",
         "//testing:lib",
+        "@com_google_guava_guava//jar",
         "@junit//jar",
     ],
 )

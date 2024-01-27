@@ -16,6 +16,8 @@
 package com.google.idea.blaze.base.syncstatus;
 
 import com.google.idea.blaze.base.model.BlazeProjectData;
+import com.google.idea.blaze.base.settings.Blaze;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.sync.autosync.ProjectTargetManager.SyncStatus;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.blaze.base.syncstatus.SyncStatusContributor.PsiFileAndName;
@@ -37,7 +39,7 @@ public class SyncStatusNodeDecorator implements ProjectViewNodeDecorator {
   @SuppressWarnings("rawtypes")
   public void decorate(ProjectViewNode node, PresentationData data) {
     Project project = node.getProject();
-    if (project == null) {
+    if (project == null || Blaze.getProjectType(project) != ProjectType.ASPECT_SYNC) {
       return;
     }
     BlazeProjectData projectData =

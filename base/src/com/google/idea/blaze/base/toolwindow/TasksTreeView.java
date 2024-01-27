@@ -15,7 +15,10 @@
  */
 package com.google.idea.blaze.base.toolwindow;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
 import com.google.common.base.Preconditions;
+import com.google.idea.blaze.base.settings.BlazeUserSettings;
 import com.google.idea.common.ui.properties.ChangeListener;
 import com.google.idea.common.ui.properties.ObservableValue;
 import com.google.idea.common.ui.properties.Property;
@@ -25,7 +28,10 @@ import com.intellij.ide.util.treeView.AbstractTreeStructure;
 import com.intellij.ide.util.treeView.NodeDescriptor;
 import com.intellij.ide.util.treeView.NodeRenderer;
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.ui.AnimatedIcon;
+import com.intellij.ui.LoadingNode;
 import com.intellij.ui.RelativeFont;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.ui.tree.AsyncTreeModel;
@@ -45,6 +51,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
@@ -60,6 +67,7 @@ import javax.swing.tree.TreeSelectionModel;
 
 /** The view that represents the tree of the hierarchy of tasks. */
 final class TasksTreeView extends AbstractView<Tree> {
+  private static final Logger logger = Logger.getInstance(TasksTreeView.class);
   private final TasksTreeModel model;
   private final Disposable parentDisposable;
   private Tree tree;
@@ -112,6 +120,11 @@ final class TasksTreeView extends AbstractView<Tree> {
   private void onTaskSelected(TreeSelectionEvent event) {
     TreePath selectionPath = event.getNewLeadSelectionPath();
     Object selection = selectionPath == null ? null : selectionPath.getLastPathComponent();
+
+    if (selection instanceof LoadingNode) {
+      selection = null;
+    }
+
     if (selection != null) {
       Task task = treeNodeToTask(selection);
       model.selectedTaskProperty().setValue(task);
@@ -142,16 +155,26 @@ final class TasksTreeView extends AbstractView<Tree> {
   }
 
   private void invalidateTreeAt(Task task) {
-    taskToTreePath(task)
-        .ifPresentOrElse(
-            path -> treeStructureModel.invalidate(path, true), treeStructureModel::invalidate);
+    ApplicationManager.getApplication()
+        .executeOnPooledThread(
+            () ->
+                taskToTreePath(task)
+                    .ifPresentOrElse(
+                        path -> treeStructureModel.invalidate(path, true),
+                        treeStructureModel::invalidate));
   }
 
   private Optional<TreePath> taskToTreePath(Task task) {
     try {
-      return treeStructureModel.getInvoker().compute(() -> taskToTreePathInternal(task)).get();
+      return treeStructureModel
+          .getInvoker()
+          .compute(() -> taskToTreePathInternal(task))
+          .get(500, MILLISECONDS);
     } catch (InterruptedException | ExecutionException e) {
       throw new IllegalStateException("Failed to compute selected path", e);
+    } catch (TimeoutException e) {
+      logger.warn("Timed out computing tree path");
+      return Optional.empty();
     }
   }
 
@@ -197,8 +220,9 @@ final class TasksTreeView extends AbstractView<Tree> {
           JMenuItem removeTaskMenuItem = new JMenuItem("Remove Task");
           removeTaskMenuItem.addActionListener(
               it -> {
-                model.tasksTreeProperty().removeTask(selectedTask);
                 model.selectedTaskProperty().setValue(null);
+                TasksToolWindowService.getInstance(selectedTask.getProject())
+                    .removeTask(selectedTask);
               });
           menu.add(removeTaskMenuItem);
           menu.show(e.getComponent(), e.getX(), e.getY());
@@ -275,6 +299,10 @@ final class TasksTreeView extends AbstractView<Tree> {
         boolean hasFocus) {
       super.customizeCellRenderer(tree, treeNode, selected, expanded, leaf, row, hasFocus);
 
+      if (treeNode instanceof LoadingNode) {
+        return;
+      }
+
       Task task = treeNodeToTask(treeNode);
       durationText = task.getDurationString().orElse(null);
       if (durationText != null) {
@@ -326,20 +354,36 @@ final class TasksTreeView extends AbstractView<Tree> {
     @Override
     public void treeNodesInserted(TreeModelEvent e) {
 
-      // Expand tree at parent of added task if parent is top-level task.
       TreePath pathToParent = e.getTreePath();
+      DefaultMutableTreeNode addedNode = objectToTreeNode(e.getChildren()[0]);
+      Task addedTask = treeNodeToTask(addedNode);
+
+      // Auto-expand tree to show only one level below top-level tasks (grandchildren remain
+      // collapsed by default). The tree is expanded at the top-level task if it is not a leaf node
+      // at the time of insertion, or if it exists in the tree as a leaf and a child task is added
+      // to it.
       if (tree != null && pathToParent != null) {
-        Task parentTask = treeNodeToTask(pathToParent.getLastPathComponent());
-        if (model.tasksTreeProperty().isTopLevelTask(parentTask)) {
-          if (!tree.isExpanded(pathToParent)) {
-            tree.expandPath(pathToParent);
+
+        // Added task is top-level task with children
+        if (model.tasksTreeProperty().isTopLevelTask(addedTask) && !addedNode.isLeaf()) {
+          TreePath pathToExpand = pathToParent.pathByAddingChild(addedNode);
+          if (!tree.isExpanded(pathToExpand)) {
+            tree.expandPath(pathToExpand);
+          }
+        } else {
+          // Added task is child of top-level task
+          Task parentTask = treeNodeToTask(pathToParent.getLastPathComponent());
+          if (model.tasksTreeProperty().isTopLevelTask(parentTask)) {
+            if (!tree.isExpanded(pathToParent)) {
+              tree.expandPath(pathToParent);
+            }
           }
         }
       }
 
       // Select top-level task when added.
-      Task addedTask = treeNodeToTask(e.getChildren()[0]);
-      if (model.tasksTreeProperty().isTopLevelTask(addedTask)) {
+      if (BlazeUserSettings.getInstance().getSelectNewestChildTask()
+          || model.tasksTreeProperty().isTopLevelTask(addedTask)) {
         model.selectedTaskProperty().setValue(addedTask);
       }
     }

@@ -18,6 +18,7 @@ package com.google.idea.blaze.android.npw.project;
 import com.android.tools.idea.projectsystem.AndroidModulePaths;
 import com.android.tools.idea.projectsystem.IdeaSourceProvider;
 import com.android.tools.idea.projectsystem.NamedModuleTemplate;
+import com.android.tools.idea.projectsystem.SourceProviderManager;
 import com.google.common.collect.Streams;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
@@ -34,7 +35,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import org.jetbrains.android.facet.AndroidFacet;
-import org.jetbrains.android.facet.SourceProviderManager;
 
 /**
  * Project paths for a Blaze Android project.
@@ -119,7 +119,6 @@ public class BlazeAndroidModuleTemplate implements AndroidModulePaths {
   public File getManifestDirectory() {
     return srcDirectory;
   }
-
   /**
    * The new component wizard uses {@link NamedModuleTemplate#getName()} for the default package
    * name of the new component. If we can figure it out from the target directory here, then we can
@@ -148,17 +147,14 @@ public class BlazeAndroidModuleTemplate implements AndroidModulePaths {
 
   public static List<NamedModuleTemplate> getTemplates(
       AndroidFacet androidFacet, @Nullable VirtualFile targetDirectory) {
-
     Module module = androidFacet.getModule();
     BlazeAndroidModuleTemplate paths = new BlazeAndroidModuleTemplate();
     VirtualFile[] roots = ModuleRootManager.getInstance(module).getContentRoots();
     if (roots.length > 0) {
       paths.moduleRoot = VfsUtilCore.virtualToIoFile(roots[0]);
     }
-
     IdeaSourceProvider sourceProvider =
         SourceProviderManager.getInstance(androidFacet).getSources();
-
     // If this happens to be a resource package,
     // the module name (resource package) would be more descriptive than the facet name (Android).
     // Otherwise, .workspace is still better than (Android).

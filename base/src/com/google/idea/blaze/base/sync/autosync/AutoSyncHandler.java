@@ -23,6 +23,7 @@ import com.google.idea.blaze.base.logging.EventLoggingService;
 import com.google.idea.blaze.base.model.primitives.TargetExpression;
 import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.settings.Blaze;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.settings.BlazeUserSettings;
 import com.google.idea.blaze.base.sync.BlazeSyncManager;
 import com.google.idea.blaze.base.sync.BlazeSyncParams;
@@ -87,7 +88,7 @@ public class AutoSyncHandler implements ProjectComponent {
 
   protected AutoSyncHandler(Project project) {
     this.project = project;
-    if (!Blaze.isBlazeProject(project)) {
+    if (Blaze.getProjectType(project) != ProjectType.ASPECT_SYNC) {
       return;
     }
     // listen for changes to the VFS

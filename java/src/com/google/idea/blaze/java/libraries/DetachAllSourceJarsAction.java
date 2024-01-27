@@ -22,7 +22,9 @@ import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.LibraryKey;
 import com.google.idea.blaze.base.projectview.ProjectViewSet;
 import com.google.idea.blaze.base.scope.BlazeContext;
+import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
+import com.google.idea.blaze.base.settings.BlazeImportSettings.ProjectType;
 import com.google.idea.blaze.base.sync.SyncListener;
 import com.google.idea.blaze.base.sync.SyncMode;
 import com.google.idea.blaze.base.sync.SyncResult;
@@ -30,15 +32,20 @@ import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.blaze.base.sync.libraries.LibraryEditor;
 import com.google.idea.blaze.java.sync.model.BlazeJarLibrary;
 import com.google.idea.common.util.Transactions;
-import com.google.idea.sdkcompat.general.BaseSdkCompat;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.externalSystem.service.project.IdeModifiableModelsProvider;
+import com.intellij.openapi.externalSystem.service.project.IdeModifiableModelsProviderImpl;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.libraries.LibraryTablesRegistrar;
 import java.util.List;
 
 class DetachAllSourceJarsAction extends BlazeProjectAction {
+
+  @Override
+  protected QuerySyncStatus querySyncSupport() {
+    return QuerySyncStatus.HIDDEN;
+  }
 
   @Override
   protected void actionPerformedInBlazeProject(Project project, AnActionEvent e) {
@@ -72,8 +79,7 @@ class DetachAllSourceJarsAction extends BlazeProjectAction {
     Transactions.submitWriteActionTransaction(
         project,
         () -> {
-          IdeModifiableModelsProvider modelsProvider =
-              BaseSdkCompat.createModifiableModelsProvider(project);
+          IdeModifiableModelsProvider modelsProvider = new IdeModifiableModelsProviderImpl(project);
           for (Library library : librariesToDetach) {
             BlazeJarLibrary blazeLibrary =
                 LibraryActionHelper.findLibraryFromIntellijLibrary(
@@ -81,11 +87,7 @@ class DetachAllSourceJarsAction extends BlazeProjectAction {
             if (blazeLibrary == null) {
               continue;
             }
-            LibraryEditor.updateLibrary(
-                project,
-                blazeProjectData.getArtifactLocationDecoder(),
-                modelsProvider,
-                blazeLibrary);
+            LibraryEditor.updateLibrary(project, blazeProjectData, modelsProvider, blazeLibrary);
           }
           modelsProvider.commit();
         });
@@ -103,7 +105,8 @@ class DetachAllSourceJarsAction extends BlazeProjectAction {
         BlazeProjectData blazeProjectData,
         SyncMode syncMode,
         SyncResult syncResult) {
-      if (syncMode == SyncMode.FULL) {
+      if (Blaze.getProjectType(project).equals(ProjectType.ASPECT_SYNC)
+          && syncMode == SyncMode.FULL) {
         detachAll(project);
       }
     }
